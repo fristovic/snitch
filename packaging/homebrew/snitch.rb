@@ -5,16 +5,16 @@ class Snitch < Formula
   desc "Catch Cursor agent lies in prose — local lie detector"
   homepage "https://github.com/fristovic/snitch"
   license "MIT"
-  version "0.2.1"
+  version "0.0.1"
 
   on_macos do
     on_arm do
-      url "https://github.com/fristovic/snitch/releases/download/v0.2.1/snitch_0.2.1_darwin_arm64.tar.gz"
-      sha256 "5433eabb8c05c4433bf1d6845de7a971a09dbbfaab2b55886a24c0d508c5fc32"
+      url "https://github.com/fristovic/snitch/releases/download/v0.0.1/snitch_0.0.1_darwin_arm64.tar.gz"
+      sha256 "16038d7f8121f9ff8868e9f548f5a9c41998eb731d007c6da515bd9894090734"
     end
     on_intel do
-      url "https://github.com/fristovic/snitch/releases/download/v0.2.1/snitch_0.2.1_darwin_amd64.tar.gz"
-      sha256 "b479c3cc14a3c5b0e7af256b7001240a3877e0661aadf2bb1361c64dc18bd5e0"
+      url "https://github.com/fristovic/snitch/releases/download/v0.0.1/snitch_0.0.1_darwin_amd64.tar.gz"
+      sha256 "c879899984cc228d8bd2da3951341dccd7e98a7779a56d2d76b3bb47eaa13a43"
     end
   end
 

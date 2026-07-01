@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.1 — 2026-07-01
+
 Initial public release: Snitch as a Cursor prose lie detector for macOS.
 
 - Watches `~/.cursor/projects/**/agent-transcripts/*.jsonl`
