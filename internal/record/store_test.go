@@ -49,6 +49,67 @@ func TestStoreMigrationIdempotent(t *testing.T) {
 	defer s2.Close()
 }
 
+func TestStoreMigratesLegacyRunsSchema(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "snitch.db")
+	legacy, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Minimal v0.2-style runs table without session_id / project_path.
+	_, err = legacy.Exec(`
+		CREATE TABLE runs (
+			id TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			model TEXT,
+			harness TEXT NOT NULL DEFAULT 'cursor',
+			coverage TEXT,
+			command TEXT,
+			duration_ms INTEGER,
+			output_hash TEXT,
+			verdict TEXT NOT NULL DEFAULT 'unverified',
+			max_severity INTEGER,
+			claim_count INTEGER DEFAULT 0,
+			verified_claims INTEGER DEFAULT 0,
+			false_claims INTEGER DEFAULT 0,
+			device_id TEXT NOT NULL
+		);
+		CREATE TABLE claims (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			run_id TEXT NOT NULL,
+			claim_type TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT 'prose',
+			target TEXT NOT NULL DEFAULT '',
+			claimed TEXT NOT NULL,
+			actual TEXT,
+			verified INTEGER DEFAULT 0,
+			severity INTEGER DEFAULT 0,
+			verifier TEXT,
+			evidence TEXT,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = legacy.Close()
+
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	err = store.InsertRun(Run{
+		ID: "r-legacy", SessionID: "sess-1", ProjectPath: "/tmp/proj",
+		TranscriptPath: "/tmp/t.jsonl", ToolCallCount: 2, DeviceID: "dev",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStoreMigratesLegacyClaimsSchema(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "snitch.db")
