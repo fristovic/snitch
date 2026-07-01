@@ -1,0 +1,7 @@
+daemon:
+  data_dir: /tmp/snitch-test
+sensors:
+  process:
+    enabled: true
+  shell:
+    enabled: false

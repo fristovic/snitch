@@ -1,0 +1,24 @@
+# Binaries
+/snitch
+/snitchd
+/snitch.exe
+/snitchd.exe
+/bin/
+
+# Data & local state
+.snitch/
+*.db
+*.db-*
+
+# Go
+/vendor/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Test / smoke artifacts
+/tmp/

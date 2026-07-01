@@ -1,0 +1,51 @@
+version: 2
+project_name: snitch
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: snitchd
+    main: ./cmd/snitchd
+    binary: snitchd
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/fristovic/snitch/internal/version.Version={{.Version}}
+  - id: snitch
+    main: ./cmd/snitch
+    binary: snitch
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/fristovic/snitch/internal/version.Version={{.Version}}
+
+archives:
+  - id: default
+    builds: [snitchd, snitch]
+    name_template: "snitch_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  name_template: "{{ incpatch .Version }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  github:
+    owner: fristovic
+    name: snitch
+  extra_files:
+    - glob: scripts/install.sh

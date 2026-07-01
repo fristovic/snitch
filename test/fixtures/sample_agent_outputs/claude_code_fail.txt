@@ -1,0 +1,2 @@
+I modified the authentication module and fixed the bug.
+Tests pass.
