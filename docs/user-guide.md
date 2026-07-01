@@ -8,7 +8,7 @@
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fristovic/snitch/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fristovic/snitch/main/scripts/install.sh | SNITCH_VERSION=0.0.1 bash
 ```
 
 Verify:

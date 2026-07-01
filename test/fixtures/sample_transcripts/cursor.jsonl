@@ -1,2 +1,0 @@
-{"role":"user","message":{"content":[{"type":"text","text":"fix the bug in main.go"}]}}
-{"role":"assistant","message":{"content":[{"type":"text","text":"I updated main.go to fix the null pointer."}]}}

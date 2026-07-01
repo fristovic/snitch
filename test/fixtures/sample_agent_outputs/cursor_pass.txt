@@ -1,3 +1,0 @@
-I created a hello world Python file at hello.py with a print statement.
-The file has been saved successfully.
-All tests pass.

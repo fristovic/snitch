@@ -10,6 +10,14 @@ No LLM. No proxy. Local SQLite only.
 
 ### macOS (one command)
 
+Pin a version (env must apply to **bash**, not only curl):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fristovic/snitch/main/scripts/install.sh | SNITCH_VERSION=0.0.1 bash
+```
+
+Latest release:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fristovic/snitch/main/scripts/install.sh | bash
 ```

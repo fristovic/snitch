@@ -1,2 +1,0 @@
-I ran the full test suite and all tests pass.
-Everything is green.

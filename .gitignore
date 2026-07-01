@@ -22,3 +22,6 @@
 
 # Test / smoke artifacts
 /tmp/
+
+# GoReleaser
+/dist/
