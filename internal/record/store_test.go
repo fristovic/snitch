@@ -1,10 +1,13 @@
 package record
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestStoreInsertAndQuery(t *testing.T) {
@@ -44,6 +47,72 @@ func TestStoreMigrationIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s2.Close()
+}
+
+func TestStoreMigratesLegacyClaimsSchema(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "snitch.db")
+	legacy, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = legacy.Exec(`
+		CREATE TABLE runs (
+			id TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			session_id TEXT,
+			transcript_path TEXT,
+			project_path TEXT,
+			harness TEXT NOT NULL DEFAULT 'cursor',
+			command TEXT,
+			duration_ms INTEGER,
+			output_hash TEXT,
+			tool_call_count INTEGER DEFAULT 0,
+			verdict TEXT NOT NULL DEFAULT 'unverified',
+			max_severity INTEGER,
+			claim_count INTEGER DEFAULT 0,
+			verified_claims INTEGER DEFAULT 0,
+			false_claims INTEGER DEFAULT 0,
+			device_id TEXT NOT NULL,
+			trace TEXT
+		);
+		CREATE TABLE claims (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			run_id TEXT NOT NULL,
+			tool_call TEXT NOT NULL,
+			target TEXT NOT NULL DEFAULT '',
+			claimed TEXT NOT NULL,
+			actual TEXT,
+			verified INTEGER DEFAULT 0,
+			severity INTEGER DEFAULT 0,
+			verifier TEXT,
+			evidence TEXT,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = legacy.Close()
+
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	_, err = store.db.Exec(`INSERT INTO runs (id, device_id) VALUES ('r1', 'd')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = store.InsertClaims([]Claim{{
+		RunID: "r1", ClaimType: "test_pass", Source: "prose", Claimed: "tests pass",
+		Verified: -1, Severity: 3,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestEnsureDeviceID(t *testing.T) {

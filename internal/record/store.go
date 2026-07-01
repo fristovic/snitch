@@ -72,15 +72,39 @@ func (s *Store) migrate() error {
 		if err != nil {
 			return err
 		}
-		if _, err := s.db.Exec(string(data)); err != nil {
-			if strings.Contains(err.Error(), "duplicate column") ||
-				strings.Contains(err.Error(), "already exists") {
-				continue
+		for _, stmt := range splitSQLStatements(string(data)) {
+			if _, err := s.db.Exec(stmt); err != nil {
+				if isBenignMigrationErr(err) {
+					continue
+				}
+				return fmt.Errorf("migration %s: %w", name, err)
 			}
-			return fmt.Errorf("migration %s: %w", name, err)
 		}
 	}
 	return nil
+}
+
+func splitSQLStatements(sql string) []string {
+	parts := strings.Split(sql, ";")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func isBenignMigrationErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate column") ||
+		strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "no such column")
 }
 
 // Close closes the database.

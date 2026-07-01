@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 
 CREATE INDEX IF NOT EXISTS idx_claims_run_id ON claims(run_id);
-CREATE INDEX IF NOT EXISTS idx_claims_claim_type ON claims(claim_type);
 CREATE INDEX IF NOT EXISTS idx_claims_severity ON claims(severity);
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at);
 CREATE INDEX IF NOT EXISTS idx_runs_verdict ON runs(verdict);
