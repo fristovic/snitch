@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/snitch_logo.png" alt="Snitch logo" width="160">
+</p>
+
 # Snitch
 
 **Catch the model lying in prose.**

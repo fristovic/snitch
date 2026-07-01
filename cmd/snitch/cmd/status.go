@@ -11,9 +11,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var statusDetailed bool
+
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show daemon status and lie statistics",
+	Short: "Show daemon status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sock := resolveSocket()
 		client, err := ipc.Connect(sock)
@@ -35,12 +37,17 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("version: %s\n", st.Version)
 		fmt.Printf("uptime: %ds\n", st.UptimeSeconds)
 		fmt.Printf("total runs: %d\n", st.TotalRuns)
+		fmt.Printf("projects watched: %d\n", st.ProjectsWatched)
+		fmt.Printf("sessions seen: %d\n", st.SessionsSeen)
+
+		if !statusDetailed {
+			return nil
+		}
+
 		fmt.Printf("snitched runs: %d\n", st.SnitchedRuns)
 		if st.TopLieType != "" {
 			fmt.Printf("top lie type: %s\n", st.TopLieType)
 		}
-		fmt.Printf("projects watched: %d\n", st.ProjectsWatched)
-		fmt.Printf("sessions seen: %d\n", st.SessionsSeen)
 		if len(st.LieStats.ByClaimType) > 0 {
 			fmt.Println("lies by type:")
 			for t, n := range st.LieStats.ByClaimType {
@@ -61,6 +68,10 @@ var statusCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func init() {
+	statusCmd.Flags().BoolVar(&statusDetailed, "detailed", false, "Show lie statistics and recent failures")
 }
 
 func resolveSocket() string {

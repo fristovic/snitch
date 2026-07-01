@@ -151,7 +151,7 @@ func printRunSummary(client *ipc.Client, r record.Run) error {
 	}
 	line := fmt.Sprintf("%s  %s", r.ID[:8], r.Verdict)
 	if r.Command != "" {
-		line += fmt.Sprintf("  %q", truncateLog(r.Command, 60))
+		line += fmt.Sprintf("  %q", truncateLog(formatPrompt(r.Command), 60))
 	}
 	if summary != "" {
 		line += "  " + summary
@@ -195,7 +195,7 @@ func printRunDetail(client *ipc.Client, runID string) error {
 	}
 	fmt.Printf("Tool calls: %d\n", resp.Run.ToolCallCount)
 	if resp.Run.Command != "" {
-		fmt.Printf("Prompt: %s\n", truncateLog(resp.Run.Command, 200))
+		fmt.Printf("Prompt: %s\n", truncateLog(formatPrompt(resp.Run.Command), 200))
 	}
 	if resp.Run.Harness != "" {
 		fmt.Printf("Harness: %s\n", resp.Run.Harness)
@@ -266,6 +266,12 @@ func truncateLog(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+func formatPrompt(s string) string {
+	s = strings.ReplaceAll(s, "<user_query>", "")
+	s = strings.ReplaceAll(s, "</user_query>", "")
+	return strings.TrimSpace(s)
 }
 
 func init() {
