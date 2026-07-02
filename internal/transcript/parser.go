@@ -9,25 +9,40 @@ import (
 
 // ToolCall is a parsed Cursor tool_use block.
 type ToolCall struct {
-	Name   string                     `json:"name"`
-	Input  map[string]json.RawMessage `json:"input"`
-	Target string                     `json:"target"`
+	ToolUseID string                     `json:"tool_use_id,omitempty"`
+	Name      string                     `json:"name"`
+	Input     map[string]json.RawMessage `json:"input"`
+	Target    string                     `json:"target"`
+	Result    string                     `json:"result,omitempty"`
+	IsError   bool                       `json:"is_error,omitempty"`
+}
+
+// ToolResult is a parsed tool_result block before correlation.
+type ToolResult struct {
+	ToolUseID string
+	Text      string
+	IsError   bool
 }
 
 // ParsedLine is one parsed JSONL line.
 type ParsedLine struct {
-	Role       string
-	Text       string
-	ToolCalls  []ToolCall
-	TurnEnded  bool
-	TurnStatus string
+	Role        string
+	Text        string
+	ToolCalls   []ToolCall
+	ToolResults []ToolResult
+	TurnEnded   bool
+	TurnStatus  string
 }
 
 type contentBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
+	Type      string          `json:"type"`
+	ID        string          `json:"id"`
+	Text      string          `json:"text"`
+	Name      string          `json:"name"`
+	Input     json.RawMessage `json:"input"`
+	ToolUseID string          `json:"tool_use_id"`
+	Content   json.RawMessage `json:"content"`
+	IsError   bool            `json:"is_error"`
 }
 
 type cursorMessage struct {
@@ -90,18 +105,56 @@ func parseLine(line string) (ParsedLine, bool) {
 				pl.Text += c.Text
 			}
 		case "tool_use":
-			tc := ToolCall{Name: c.Name}
+			tc := ToolCall{Name: c.Name, ToolUseID: c.ID}
 			if len(c.Input) > 0 {
 				_ = json.Unmarshal(c.Input, &tc.Input)
 			}
 			tc.Target = deriveTarget(tc)
 			pl.ToolCalls = append(pl.ToolCalls, tc)
+		case "tool_result":
+			text := decodeToolResultContent(c.Content)
+			pl.ToolResults = append(pl.ToolResults, ToolResult{
+				ToolUseID: c.ToolUseID,
+				Text:      text,
+				IsError:   c.IsError,
+			})
 		}
 	}
-	if pl.Text == "" && len(pl.ToolCalls) == 0 {
+	if pl.Text == "" && len(pl.ToolCalls) == 0 && len(pl.ToolResults) == 0 {
 		return ParsedLine{}, false
 	}
 	return pl, true
+}
+
+func decodeToolResultContent(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &blocks); err == nil {
+		var b strings.Builder
+		for i, block := range blocks {
+			if block.Text == "" {
+				continue
+			}
+			if b.Len() > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(block.Text)
+			if i == len(blocks)-1 {
+				break
+			}
+		}
+		return b.String()
+	}
+	return string(raw)
 }
 
 func deriveTarget(tc ToolCall) string {
@@ -117,6 +170,31 @@ func deriveTarget(tc ToolCall) string {
 		}
 	}
 	return ""
+}
+
+// AttachToolResults correlates tool_result blocks to tool_use calls by ID.
+func AttachToolResults(calls []ToolCall, results []ToolResult) []ToolCall {
+	if len(results) == 0 {
+		return calls
+	}
+	byID := make(map[string]ToolResult, len(results))
+	for _, r := range results {
+		if r.ToolUseID != "" {
+			byID[r.ToolUseID] = r
+		}
+	}
+	out := make([]ToolCall, len(calls))
+	copy(out, calls)
+	for i := range out {
+		if out[i].ToolUseID == "" {
+			continue
+		}
+		if r, ok := byID[out[i].ToolUseID]; ok {
+			out[i].Result = r.Text
+			out[i].IsError = r.IsError
+		}
+	}
+	return out
 }
 
 // InputString returns a string field from tool input.

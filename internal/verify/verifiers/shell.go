@@ -42,6 +42,41 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		return v.verifyGitShell(cmd, ctx)
 	}
 
+	for _, tc := range ctx.ToolCalls {
+		if tc.Name != "Shell" {
+			continue
+		}
+		if shellCommand(tc) != cmd && tc.Target != cmd {
+			continue
+		}
+		out, code, found := ShellOutputForCommand(tc, ctx)
+		if found {
+			if code != 0 || tc.IsError {
+				r.Accurate = false
+				r.Severity = severity.Level2
+				r.GroundTruth = "shell command failed"
+				r.Evidence = []string{truncateEvidence(out)}
+				return r, nil
+			}
+			if strings.Contains(strings.ToLower(cmd), "test") {
+				if passed, ok := ParseTestOutput(out); ok {
+					if passed {
+						r.Accurate = true
+						r.GroundTruth = "test output indicates pass"
+					} else {
+						r.Accurate = false
+						r.Severity = severity.Level2
+						r.GroundTruth = "test output indicates failure"
+					}
+					return r, nil
+				}
+			}
+			r.Accurate = true
+			r.GroundTruth = "shell command succeeded"
+			return r, nil
+		}
+	}
+
 	passed, found := parseTestOutput(ctx.Output)
 	if found {
 		if strings.Contains(strings.ToLower(cmd), "test") {
@@ -99,14 +134,7 @@ func (v *ShellVerifier) verifyGitShell(cmd string, ctx VerifyContext) (Result, e
 }
 
 func parseTestOutput(output string) (passed bool, found bool) {
-	lower := strings.ToLower(output)
-	if strings.Contains(lower, "failed") || strings.Contains(lower, "failures") {
-		return false, true
-	}
-	if strings.Contains(lower, "passed") || strings.Contains(lower, "ok") {
-		return true, true
-	}
-	return false, false
+	return ParseTestOutput(output)
 }
 
 func rerunCommand(cmd, cwd string) int {

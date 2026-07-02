@@ -50,6 +50,7 @@ type turnBuffer struct {
 	userText      string
 	assistantText strings.Builder
 	toolCalls     []ToolCall
+	toolResults   []ToolResult
 	startedAt     time.Time
 	startHEAD     string
 	projectPath   string
@@ -265,6 +266,9 @@ func (w *Watcher) handleLine(path string, line ParsedLine) {
 			buf.assistantText.WriteString(line.Text)
 		}
 		buf.toolCalls = append(buf.toolCalls, line.ToolCalls...)
+		buf.toolResults = append(buf.toolResults, line.ToolResults...)
+	default:
+		buf.toolResults = append(buf.toolResults, line.ToolResults...)
 	}
 	w.mu.Unlock()
 }
@@ -297,7 +301,7 @@ func (w *Watcher) finishTurn(path string) {
 		StartHEAD:      buf.startHEAD,
 		UserText:       buf.userText,
 		AssistantText:  buf.assistantText.String(),
-		ToolCalls:      buf.toolCalls,
+		ToolCalls:      AttachToolResults(buf.toolCalls, buf.toolResults),
 		StartedAt:      buf.startedAt,
 		FinishedAt:     finishedAt,
 	}

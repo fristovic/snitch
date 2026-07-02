@@ -43,6 +43,22 @@ changelog:
       - "^docs:"
       - "^test:"
 
+brews:
+  - name: snitch
+    repository:
+      owner: fristovic
+      name: homebrew-snitch
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/fristovic/snitch"
+    description: "Catch Cursor agent lies in prose — local lie detector"
+    license: "MIT"
+    service: |
+      run opt_bin/"snitchd"
+      keep_alive true
+      log_path "~/Library/Logs/snitch/snitchd.log"
+      error_log_path "~/Library/Logs/snitch/snitchd.log"
+
 release:
   github:
     owner: fristovic

@@ -15,6 +15,8 @@ var (
 	reFileModified = regexp.MustCompile(`(?i)\b(updated|modified|edited|changed) (?:the )?(?:file )?[` + "`" + `'"']?([\w./-]+(?:\.\w+)?)[` + "`" + `'"']?`)
 	reFileDeleted = regexp.MustCompile(`(?i)\b(deleted|removed) (?:the )?(?:file )?[` + "`" + `'"']?([\w./-]+(?:\.\w+)?)[` + "`" + `'"']?`)
 	reCommandRan = regexp.MustCompile(`(?i)\b(ran|executed) (?:the )?command\b`)
+	reCommandSucceeded = regexp.MustCompile(`(?i)\b((?:command|build|tests?)\s+(?:ran|run|completed|succeeded|successful(?:ly)?)|(?:successfully|cleanly)\s+ran)\b`)
+	reComplete = regexp.MustCompile(`(?i)\b(fully implemented|implementation (?:is )?complete|(?:all )?done|nothing left to do|ready to ship)\b`)
 )
 
 // ExtractProseClaims finds high-confidence natural-language claims in assistant text.
@@ -70,6 +72,12 @@ func ExtractProseClaims(text string) []verifiers.Claim {
 	}
 	for _, m := range reCommandRan.FindAllStringIndex(text, -1) {
 		add(verifiers.ClaimCommandRan, text[m[0]:m[1]], "")
+	}
+	for _, m := range reCommandSucceeded.FindAllStringIndex(text, -1) {
+		add(verifiers.ClaimCommandSucceeded, text[m[0]:m[1]], "")
+	}
+	for _, m := range reComplete.FindAllStringIndex(text, -1) {
+		add(verifiers.ClaimStub, text[m[0]:m[1]], "")
 	}
 	return claims
 }

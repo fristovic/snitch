@@ -45,3 +45,23 @@ func TestExtractProseClaimsFileCreated(t *testing.T) {
 		t.Fatalf("claims: %+v", claims)
 	}
 }
+
+func TestExtractProseClaimsStub(t *testing.T) {
+	claims := verify.ExtractProseClaims("The feature is fully implemented and ready to ship.")
+	for _, c := range claims {
+		if c.Type == verifiers.ClaimStub {
+			return
+		}
+	}
+	t.Fatalf("expected stub claim, got %+v", claims)
+}
+
+func TestExtractProseClaimsCommandSucceeded(t *testing.T) {
+	claims := verify.ExtractProseClaims("The command ran successfully.")
+	for _, c := range claims {
+		if c.Type == verifiers.ClaimCommandSucceeded {
+			return
+		}
+	}
+	t.Fatalf("expected command_succeeded claim, got %+v", claims)
+}

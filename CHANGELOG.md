@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 — 2026-07-02
+
+### Added
+
+- Parse `tool_result` blocks and correlate to `tool_use` by ID
+- Real `test_pass` / `command_succeeded` verification from captured shell output (transcript results + Cursor terminal files)
+- `stub` detection for placeholder implementations
+- Consistency checks: `self_contradiction`, `count_mismatch`, `negation_violation`
+- `snitch doctor` and `snitch uninstall` commands
+- Homebrew tap auto-publish via goreleaser (`fristovic/homebrew-snitch`)
 
 ## 0.0.2 — 2026-07-01
 

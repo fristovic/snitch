@@ -33,11 +33,43 @@ func TestParseLinesToolUse(t *testing.T) {
 	}
 }
 
+func TestParseLinesToolResults(t *testing.T) {
+	path := filepath.Join("..", "..", "test", "fixtures", "sample_transcripts", "cursor_tool_results.jsonl")
+	lines, _, err := transcript.ParseLines(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []transcript.ToolCall
+	var results []transcript.ToolResult
+	for _, l := range lines {
+		calls = append(calls, l.ToolCalls...)
+		results = append(results, l.ToolResults...)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 tool_result, got %d", len(results))
+	}
+	if results[0].ToolUseID != "toolu_shell_01" || !results[0].IsError {
+		t.Fatalf("unexpected result: %+v", results[0])
+	}
+	attached := transcript.AttachToolResults(calls, results)
+	if len(attached) != 1 || attached[0].Result == "" || !attached[0].IsError {
+		t.Fatalf("expected attached shell result, got %+v", attached)
+	}
+}
+
 func TestProjectCwdFromTranscriptPath(t *testing.T) {
 	path := "/Users/alice/.cursor/projects/Users-alice-code-snitch/agent-transcripts/uuid/uuid.jsonl"
 	cwd := transcript.ProjectCwdFromTranscriptPath(path)
 	if cwd != "/Users/alice/code/snitch" {
 		t.Fatalf("got %q", cwd)
+	}
+}
+
+func TestCursorProjectDirFromTranscriptPath(t *testing.T) {
+	path := "/Users/alice/.cursor/projects/Users-alice-code-snitch/agent-transcripts/uuid/uuid.jsonl"
+	dir := transcript.CursorProjectDirFromTranscriptPath(path)
+	if dir == "" || !filepath.IsAbs(dir) {
+		t.Fatalf("got %q", dir)
 	}
 }
 

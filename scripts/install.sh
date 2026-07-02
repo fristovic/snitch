@@ -163,17 +163,28 @@ print_next_steps() {
 
 Snitch is installed — watching Cursor transcripts.
 
-  snitch status          # daemon + lie stats
+  snitch doctor          # verify install + Cursor
+  snitch status          # daemon health
   snitch lies            # caught lies
   snitch log --watch     # live failures
   snitch dashboard       # interactive TUI
 
 Open a new terminal (or: exec \$SHELL) if PATH was updated.
 
-Homebrew:
-  brew install --formula "https://raw.githubusercontent.com/${REPO}/main/packaging/homebrew/snitch.rb"
+Homebrew (recommended):
+  brew tap fristovic/snitch
+  brew install snitch
+  brew services start snitch
 
 EOF
+}
+
+detect_cursor() {
+  if [[ -d "/Applications/Cursor.app" || -d "$HOME/.cursor" ]]; then
+    return 0
+  fi
+  warn "Cursor not detected (/Applications/Cursor.app or ~/.cursor). Install Cursor first, then re-run."
+  return 1
 }
 
 main() {
@@ -181,6 +192,7 @@ main() {
   os="$(detect_os)"
   arch="$(detect_arch)"
   ver="$(resolve_version)"
+  detect_cursor || true
 
   if [[ "$INSTALL_FROM_SOURCE" == "1" || -z "$ver" ]]; then
     build_from_source "${ver:-dev}"

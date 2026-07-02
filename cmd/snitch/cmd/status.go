@@ -40,6 +40,10 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("projects watched: %d\n", st.ProjectsWatched)
 		fmt.Printf("sessions seen: %d\n", st.SessionsSeen)
 
+		if st.TotalRuns == 0 {
+			fmt.Println("\nwatching — trigger a Cursor agent turn to see results")
+		}
+
 		if !statusDetailed {
 			return nil
 		}

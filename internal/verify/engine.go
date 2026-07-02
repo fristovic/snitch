@@ -35,6 +35,7 @@ func NewEngine(bus *event.Bus, store *record.Store, cfg config.VerificationConfi
 		cfg:   cfg,
 		verifiers: []verifiers.Verifier{
 			&verifiers.ContradictionVerifier{},
+			&verifiers.ConsistencyVerifier{},
 			&verifiers.FileVerifier{},
 			verifiers.NewShellVerifier(cfg.ShellVerifier),
 			&verifiers.SubagentVerifier{},
@@ -108,7 +109,10 @@ func (e *Engine) process(ev event.Event) {
 		StartHEAD:      payload.StartHEAD,
 		TranscriptPath: payload.TranscriptPath,
 		ObservedAt:     payload.FinishedAt,
+		StartedAt:      payload.StartedAt,
+		FinishedAt:     payload.FinishedAt,
 		ToolCalls:      payload.ToolCalls,
+		AssistantText:  payload.AssistantText,
 	}
 
 	maxSev := severity.Level0
@@ -185,6 +189,7 @@ func (e *Engine) process(ev event.Event) {
 
 func (e *Engine) buildClaims(payload capture.RunPayload) []verifiers.Claim {
 	claims := ExtractProseClaims(payload.AssistantText)
+	claims = append(claims, verifiers.ExtractConsistencyClaims(payload.AssistantText, payload.ToolCalls)...)
 	if len(payload.ToolCalls) == 0 && HasActionProse(claims) {
 		claims = append(claims, verifiers.Claim{
 			Type:        verifiers.ClaimNoAction,

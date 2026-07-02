@@ -12,14 +12,19 @@ import (
 type ClaimType string
 
 const (
-	ClaimTestPass     ClaimType = "test_pass"
-	ClaimCommitted    ClaimType = "committed"
-	ClaimPushed       ClaimType = "pushed"
-	ClaimFileCreated  ClaimType = "file_created"
-	ClaimFileModified ClaimType = "file_modified"
-	ClaimFileDeleted  ClaimType = "file_deleted"
-	ClaimCommandRan   ClaimType = "command_ran"
-	ClaimNoAction     ClaimType = "no_action"
+	ClaimTestPass          ClaimType = "test_pass"
+	ClaimCommitted         ClaimType = "committed"
+	ClaimPushed            ClaimType = "pushed"
+	ClaimFileCreated       ClaimType = "file_created"
+	ClaimFileModified      ClaimType = "file_modified"
+	ClaimFileDeleted       ClaimType = "file_deleted"
+	ClaimCommandRan        ClaimType = "command_ran"
+	ClaimCommandSucceeded  ClaimType = "command_succeeded"
+	ClaimStub              ClaimType = "stub"
+	ClaimNoAction          ClaimType = "no_action"
+	ClaimSelfContradiction ClaimType = "self_contradiction"
+	ClaimCountMismatch     ClaimType = "count_mismatch"
+	ClaimNegationViolation ClaimType = "negation_violation"
 )
 
 // Claim is a prose or tool-derived claim to verify.
@@ -40,7 +45,10 @@ type VerifyContext struct {
 	StartHEAD      string
 	TranscriptPath string
 	ObservedAt     time.Time
+	StartedAt      time.Time
+	FinishedAt     time.Time
 	ToolCalls      []transcript.ToolCall
+	AssistantText  string
 }
 
 // Result is a verification outcome.
@@ -94,7 +102,8 @@ func rawToMap(in map[string]json.RawMessage) map[string]any {
 func IsActionClaim(t ClaimType) bool {
 	switch t {
 	case ClaimTestPass, ClaimCommitted, ClaimPushed,
-		ClaimFileCreated, ClaimFileModified, ClaimFileDeleted, ClaimCommandRan:
+		ClaimFileCreated, ClaimFileModified, ClaimFileDeleted,
+		ClaimCommandRan, ClaimCommandSucceeded, ClaimStub:
 		return true
 	default:
 		return false

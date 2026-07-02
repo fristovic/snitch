@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -11,6 +12,21 @@ func ProjectCwdFromTranscriptPath(path string) string {
 	for i, p := range parts {
 		if p == "projects" && i+1 < len(parts) {
 			return DecodeProjectSlug(parts[i+1])
+		}
+	}
+	return ""
+}
+
+// CursorProjectDirFromTranscriptPath returns ~/.cursor/projects/<slug> for a transcript.
+func CursorProjectDirFromTranscriptPath(path string) string {
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	for i, p := range parts {
+		if p == "projects" && i+1 < len(parts) {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return ""
+			}
+			return filepath.Join(home, ".cursor", "projects", parts[i+1])
 		}
 	}
 	return ""
