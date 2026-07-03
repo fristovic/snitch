@@ -213,11 +213,10 @@ Snitch Bar manages the lie detector — it opens from your menu bar at login (or
 Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume.
 
   snitch status           # daemon health (when Snitching...)
-  snitch lies             # full lie history
+  snitch dashboard        # browse runs and lies interactively
 
 Advanced:
-  snitch log              # failed runs (power users; --watch overlaps menu bar)
-  snitch dashboard        # interactive TUI
+  snitch log --run <id>   # full verification detail for one run
 
 Open a new terminal (or: exec \$SHELL) if PATH was updated.
 

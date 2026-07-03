@@ -2,8 +2,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/fristovic/snitch/internal/record"
 )
 
 func TestStatusLabel(t *testing.T) {
@@ -36,14 +34,3 @@ func TestToggleLabel(t *testing.T) {
 	}
 }
 
-func TestFormatLieCopy(t *testing.T) {
-	got := FormatLieCopy(record.LieClaim{Claim: record.Claim{
-		ClaimType: "stub",
-		Claimed:   "fully implemented",
-		Actual:    "placeholder",
-	}})
-	want := "stub\n\"fully implemented\"\n→ placeholder"
-	if got != want {
-		t.Fatalf("got %q", got)
-	}
-}

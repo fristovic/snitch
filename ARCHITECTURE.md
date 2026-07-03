@@ -2,7 +2,7 @@
 
 Snitch is a **lie detector** for Cursor on macOS. It extracts claims from assistant **prose**, checks them against **evidence** (tool calls + captured output + filesystem + git + consistency), and stores results locally.
 
-**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires alerts on new lies, and exposes **Copy Last Lie** / **Browse lies…**. The CLI (`snitch`) is for history, debugging, and power users.
+**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires alerts on new lies, and exposes **Show Last Lie** / **Open Dashboard…**. The CLI (`snitch`) is for history, debugging, and power users.
 
 ## Data flow
 
@@ -24,7 +24,7 @@ Cursor transcript JSONL (+ terminal files fallback)
  snitchd IPC ◄──── Snitch Bar (subscribe, status, loadLatestLie)
         │
         ▼
- snitch lies / log / dashboard (CLI)
+ snitch log / dashboard (CLI)
 ```
 
 ## Components
@@ -47,7 +47,7 @@ Cursor transcript JSONL (+ terminal files fallback)
 2. Snitch Bar starts bundled `snitchd` (or finds it on PATH) and connects via IPC.
 3. Menu shows **Snitching...**, **Start Snitching**, or **Stop Snitching** depending on state.
 4. On `subscribe` events with failed runs, icon enters alert state; optional Notification Center alert from `snitchd`.
-5. **Copy Last Lie** loads the latest lie via IPC (`loadLatestLie`); lie preview was removed from the dropdown.
+5. **Show Last Lie** loads the latest lie via IPC (`loadLatestLie`) and opens `snitch log --run <id>` in Terminal.
 
 ## Prose lie detection
 

@@ -30,7 +30,7 @@ Verify:
 snitch status
 ```
 
-Look for the Snitch icon in the menu bar. Click it for status, **Copy Last Lie**, or **Browse lies…** (`snitch lies` in Terminal).
+Look for the Snitch icon in the menu bar. Click it for status, **Show Last Lie**, or **Open Dashboard…**.
 
 ## Menu bar (Snitch Bar)
 
@@ -38,7 +38,8 @@ Open Snitch Bar from Terminal with `snitch start`, or from the menu bar after in
 
 - **Snitching...** status when the lie detector is active
 - **Start Snitching** / **Stop Snitching** — pause / resume lie detection
-- **Copy Last Lie** and **Browse lies…**
+- **Show Last Lie** — open full verification log for the latest lie (`snitch log --run <id>`)
+- **Open Dashboard…** — open interactive TUI in Terminal (`snitch dashboard`)
 - **Quit Snitch Bar** stops the daemon
 
 If Snitch is paused or offline, choose **Start Snitching** to resume.
@@ -62,32 +63,21 @@ A **snitch** is a high-confidence prose claim that evidence contradicts.
 
 ## Commands
 
-### `snitch lies`
+### `snitch log`
 
-List caught lies:
-
-```bash
-snitch lies
-snitch lies --type test_pass
-snitch lies --project ~/code/myapp --since 24h
-snitch lies --json
-```
-
-### `snitch log` (advanced)
-
-Show runs (failed by default). The menu bar already reflects new lies and alerts; `--watch` is mainly for Terminal-only workflows:
+Show full verification detail for a single run:
 
 ```bash
-snitch log
-snitch log --all
 snitch log --run <id>
-snitch log --type committed --search "refactor"
-snitch log --watch   # live tail; overlaps Snitch Bar updates
+snitch log --run <id> --trace
+snitch log --run <id> --json
 ```
 
-### `snitch dashboard` (advanced)
+Use `snitch dashboard` to browse history and find run IDs.
 
-Interactive TUI with live updates:
+### `snitch dashboard`
+
+Interactive TUI with live refresh:
 
 - `tab` — switch runs / lies view
 - `v` — cycle verdict filter

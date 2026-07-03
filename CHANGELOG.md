@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+## 0.1.3 — 2026-07-03
+
 ### Changed
 
+- Removed `snitch lies` CLI command; use `snitch dashboard` (lies tab) to browse lie history
+- `snitch log` now requires `--run <id>` (detail-only); list/watch modes removed
+- Menu bar: **Browse Lies…** renamed to **Open Dashboard…** (opens `snitch dashboard`); **Show Last Lie** opens `snitch log --run <id>`
 - Menu-bar-first docs and messaging: **Start/Stop Snitching** (not "Watching"); lie preview removed from dropdown
 - `daemonNotRunning()` and `snitch doctor` point users to Snitch Bar / Start Snitching
 - curl install no longer leaves orphan `snitchbar` binary on PATH (app bundle only)

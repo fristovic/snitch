@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/fristovic/snitch/internal/record"
 )
 
@@ -40,7 +38,3 @@ func ToggleLabel(s MenuState) string {
 	return "Stop Snitching"
 }
 
-// FormatLieCopy returns clipboard text for a lie.
-func FormatLieCopy(lie record.LieClaim) string {
-	return fmt.Sprintf("%s\n\"%s\"\n→ %s", lie.ClaimType, lie.Claimed, lie.Actual)
-}

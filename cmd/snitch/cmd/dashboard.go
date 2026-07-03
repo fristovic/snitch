@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,7 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fristovic/snitch/internal/config"
-	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/platform"
 	"github.com/fristovic/snitch/internal/record"
@@ -44,15 +42,12 @@ type dashboardModel struct {
 	mode        viewMode
 	cursor      int
 	width       int
-	height      int
-	err         error
-	watchCtx    context.Context
-	watchCancel context.CancelFunc
+	height int
+	err    error
 }
 
 type tickMsg struct{}
 type refreshMsg struct{}
-type eventMsg ipc.EventMsg
 
 func (m dashboardModel) Init() tea.Cmd {
 	return tea.Batch(tickCmd(m.cfg.RefreshMS), m.loadData())
@@ -134,20 +129,9 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err := m.refresh(); err != nil {
 			m.err = err
 		}
-	case eventMsg:
-		var p event.RunVerifiedPayload
-		if json.Unmarshal(msg.Data, &p) == nil {
-			if m.filter.Verdict != "all" && p.Verdict == record.VerdictPass {
-				return m, nil
-			}
-		}
-		_ = m.refresh()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			if m.watchCancel != nil {
-				m.watchCancel()
-			}
 			return m, tea.Quit
 		case "up", "k":
 			if m.cursor > 0 {
@@ -381,20 +365,6 @@ func promptSearch() string {
 	return strings.TrimSpace(s)
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 var dashboardCmd = &cobra.Command{
 	Use:   "dashboard",
 	Short: "Interactive lie-detector TUI",
@@ -418,24 +388,14 @@ var dashboardCmd = &cobra.Command{
 			tuiCfg.RefreshMS = 500
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
 		m := dashboardModel{
-			client:      client,
-			cfg:         tuiCfg,
-			filter:      filterState{Verdict: "snitched"},
-			watchCtx:    ctx,
-			watchCancel: cancel,
+			client: client,
+			cfg:    tuiCfg,
+			filter: filterState{Verdict: "snitched"},
 		}
-
-		go func() {
-			_ = ipc.Watch(ctx, resolveSocket(), func(msg ipc.EventMsg) error {
-				return nil
-			})
-		}()
 
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		_, err = p.Run()
-		cancel()
 		client.Close()
 		return err
 	},

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -28,8 +29,8 @@ type trayApp struct {
 
 	status     *systray.MenuItem
 	toggleItem *systray.MenuItem
-	copyItem   *systray.MenuItem
-	browseItem *systray.MenuItem
+	showItem   *systray.MenuItem
+	dashboardItem *systray.MenuItem
 	prefsItem  *systray.MenuItem
 	quitItem   *systray.MenuItem
 }
@@ -53,8 +54,8 @@ func (a *trayApp) onReady() {
 	systray.AddSeparator()
 	a.toggleItem = systray.AddMenuItem("Stop Snitching", "Start or stop lie detection")
 	systray.AddSeparator()
-	a.copyItem = systray.AddMenuItem("Copy Last Lie", "")
-	a.browseItem = systray.AddMenuItem("Browse Lies…", "")
+	a.showItem = systray.AddMenuItem("Show Last Lie", "Open full verification log for the latest lie")
+	a.dashboardItem = systray.AddMenuItem("Open Dashboard…", "Browse runs and lies in the interactive TUI")
 	systray.AddSeparator()
 	a.prefsItem = systray.AddMenuItem("Preferences…", "")
 	a.quitItem = systray.AddMenuItem("Quit Snitch Bar", "")
@@ -74,13 +75,13 @@ func (a *trayApp) onExit() {
 func (a *trayApp) handleClicks() {
 	for {
 		select {
-		case <-a.copyItem.ClickedCh:
+		case <-a.showItem.ClickedCh:
 			a.acknowledgeAlert()
 			a.loadLatestLie()
-			a.copyLastLie()
-		case <-a.browseItem.ClickedCh:
+			a.showLastLie()
+		case <-a.dashboardItem.ClickedCh:
 			a.acknowledgeAlert()
-			_ = openTerminal("snitch lies")
+			_ = openTerminal("snitch dashboard")
 		case <-a.toggleItem.ClickedCh:
 			a.mu.Lock()
 			active := a.state.Connected && !a.state.Paused && !a.state.Starting
@@ -138,14 +139,14 @@ func (a *trayApp) pauseWatching() {
 	a.signalRefresh()
 }
 
-func (a *trayApp) copyLastLie() {
+func (a *trayApp) showLastLie() {
 	a.mu.Lock()
 	lie := a.state.Lie
 	a.mu.Unlock()
 	if lie == nil {
 		return
 	}
-	_ = copyToClipboard(FormatLieCopy(*lie))
+	_ = openTerminal(fmt.Sprintf("snitch log --run %s", lie.RunID))
 }
 
 func (a *trayApp) pollLoop() {
@@ -307,6 +308,11 @@ func (a *trayApp) render() {
 		a.toggleItem.Disable()
 	} else {
 		a.toggleItem.Enable()
+	}
+	if st.Lie == nil {
+		a.showItem.Disable()
+	} else {
+		a.showItem.Enable()
 	}
 }
 

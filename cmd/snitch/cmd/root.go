@@ -19,6 +19,6 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&socketPath, "socket", "", "IPC socket path (auto-detected if empty)")
-	rootCmd.AddCommand(statusCmd, logCmd, liesCmd, configCmd, analyticsCmd, dashboardCmd)
+	rootCmd.AddCommand(statusCmd, logCmd, configCmd, analyticsCmd, dashboardCmd)
 }
 
