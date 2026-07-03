@@ -37,9 +37,9 @@ builds:
 
 archives:
   - id: default
-    builds: [snitchd, snitch, snitchbar]
+    ids: [snitchd, snitch, snitchbar]
     name_template: "snitch_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats: [tar.gz]
     files:
       - LICENSE
       - README.md
@@ -47,14 +47,14 @@ archives:
       - scripts/install.sh
       - install/macos/Snitch-Bar-Info.plist
       - install/macos/com.snitch.menubar.plist
-      - src: "dist/snitchbar_{{ .Os }}_{{ .Arch }}/Snitch Bar.app/**"
+      - src: "dist/snitchbar_{{ .Target }}/Snitch Bar.app/**"
         dst: "Snitch Bar.app"
 
 checksum:
   name_template: checksums.txt
 
 snapshot:
-  name_template: "{{ incpatch .Version }}"
+  version_template: "{{ incpatch .Version }}"
 
 changelog:
   sort: asc
@@ -96,11 +96,12 @@ brews:
         system "launchctl", "bootstrap", "gui/#{Process.uid}", plist_dest rescue system("launchctl", "load", plist_dest)
       end
     caveats: |
-      Snitch Bar manages the lie detector automatically.
-      Open after install:
-        open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
+      Snitch Bar manages lie detection automatically.
+      After install:
+        snitch start
       Use Start Snitching / Stop Snitching in the menu bar to pause or resume.
       No brew services step — the menubar LaunchAgent opens Snitch Bar at login.
+    skip_upload: '{{ not .Env.HOMEBREW_TAP_TOKEN }}'
 
 release:
   github:

@@ -12,7 +12,7 @@
 ```bash
 brew tap fristovic/snitch
 brew install snitch
-open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
+snitch start
 ```
 
 The curl installer also registers Snitch Bar to open at login.
@@ -21,7 +21,7 @@ The curl installer also registers Snitch Bar to open at login.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fristovic/snitch/main/scripts/install.sh | bash
-open "$HOME/.local/share/snitch/Snitch Bar.app"
+snitch start
 ```
 
 Verify:
@@ -34,7 +34,7 @@ Look for the Snitch icon in the menu bar. Click it for status, **Copy Last Lie**
 
 ## Menu bar (Snitch Bar)
 
-Snitch Bar is the main app (no Dock icon). It **starts `snitchd` automatically** when you open it.
+Open Snitch Bar from Terminal with `snitch start`, or from the menu bar after install. Snitch Bar is the main app (no Dock icon). It **starts lie detection automatically** when you open it.
 
 - **Snitching...** status when the lie detector is active
 - **Start Snitching** / **Stop Snitching** — pause / resume lie detection

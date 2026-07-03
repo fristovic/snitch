@@ -13,12 +13,12 @@ var statusDetailed bool
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show daemon status",
+	Short: "Show lie detection status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sock := ipc.ResolveSocket(socketPath)
 		client, err := ipc.Connect(sock)
 		if err != nil {
-			daemonNotRunning()
+			printSnitchStoppedStatus()
 			return nil
 		}
 		defer client.Close()
@@ -31,7 +31,7 @@ var statusCmd = &cobra.Command{
 		if err := json.Unmarshal(data, &st); err != nil {
 			return err
 		}
-		fmt.Printf("snitchd: running\n")
+		fmt.Printf("snitch: snitching\n")
 		fmt.Printf("version: %s\n", st.Version)
 		fmt.Printf("uptime: %ds\n", st.UptimeSeconds)
 		fmt.Printf("total runs: %d\n", st.TotalRuns)

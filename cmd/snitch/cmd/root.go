@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +22,3 @@ func init() {
 	rootCmd.AddCommand(statusCmd, logCmd, liesCmd, configCmd, analyticsCmd, dashboardCmd)
 }
 
-func daemonNotRunning() {
-	fmt.Fprintln(os.Stderr, "lie detector is not running. Open Snitch Bar from the menu bar, or choose Start Snitching from its menu.")
-	os.Exit(1)
-}

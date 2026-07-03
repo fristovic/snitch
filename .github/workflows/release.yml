@@ -21,11 +21,33 @@ jobs:
         with:
           go-version: "1.24"
 
-      - uses: goreleaser/goreleaser-action@v6
+      # GitHub release + archives first; Homebrew is a separate step so a bad tap
+      # token does not fail the whole release (v0.1.1 published then errored on tap).
+      - name: GoReleaser (GitHub release)
+        uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --skip=homebrew
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: GoReleaser (Homebrew tap)
+        id: homebrew
+        uses: goreleaser/goreleaser-action@v6
+        continue-on-error: true
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: >-
+            release
+            --skip=announce,archive,aur,aur-source,before,chocolatey,docker,flatpak,ko,makeself,mcp,nfpm,nix,notarize,publish,sbom,scoop,sign,snapcraft,srpm,validate,winget
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Homebrew tap publish failed
+        if: steps.homebrew.outcome == 'failure'
+        run: |
+          echo "::warning::Homebrew tap publish failed. GitHub release artifacts were still published."
+          echo "::warning::Set a valid HOMEBREW_TAP_TOKEN secret (see packaging/homebrew-tap/README.md)."

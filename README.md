@@ -17,10 +17,10 @@
 ```bash
 brew tap fristovic/snitch
 brew install snitch
-open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
+snitch start
 ```
 
-Snitch Bar starts the lie detector automatically. Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume — no `brew services` step needed.
+Snitch Bar opens in the menu bar and starts the lie detector automatically. Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume — no `brew services` step needed.
 
 ### macOS (curl)
 
@@ -39,7 +39,7 @@ From a cloned repo:
 After install, open Snitch Bar:
 
 ```bash
-open "$HOME/.local/share/snitch/Snitch Bar.app"
+snitch start
 ```
 
 ### What the installer does
@@ -51,23 +51,26 @@ open "$HOME/.local/share/snitch/Snitch Bar.app"
 
 ## Quick start
 
-Open **Snitch Bar** from your menu bar. It starts the lie detector automatically and shows **Snitching...** when ready.
+```bash
+snitch start              # open Snitch Bar (menu bar, no Dock icon)
+```
 
-Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume.
+Snitch Bar starts lie detection automatically and shows **Snitching...** when ready. Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume.
 
 When the model lies, the icon alerts and macOS may show a notification. Use **Copy Last Lie** in the menu (or `snitch lies` in Terminal) to see details.
 
 ```bash
-snitch status           # daemon health
-snitch lies             # full lie history
+snitch status             # are we snitching?
+snitch lies               # full lie history
 ```
 
 ## Commands
 
 | Command              | Description                                                       |
 | -------------------- | ----------------------------------------------------------------- |
-| **Menu bar**         | Starts/stops daemon; alert icon, Start/Stop Snitching, Copy Last Lie |
-| `snitch status`      | Daemon health (`--detailed` for lie stats)                        |
+| `snitch start`       | Open Snitch Bar; turn detection on/off from the menu bar          |
+| **Menu bar**         | Start/Stop Snitching, alert icon, Copy Last Lie, Browse Lies…     |
+| `snitch status`      | Lie detection status (`--detailed` for stats)                     |
 | `snitch lies`        | List caught lies (`--type`, `--project`, `--since`, `--json`)     |
 | `snitch log`         | Run log (advanced; `--watch` duplicates menu bar live updates)    |
 | `snitch dashboard`   | Interactive TUI (advanced)                                        |

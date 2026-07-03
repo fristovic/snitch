@@ -64,10 +64,10 @@ var doctorCmd = &cobra.Command{
 		printCheck("transcript watch path", fileExists(watch), watch)
 
 		if !ok {
-			fmt.Println("\nSome checks failed. Open Snitch Bar from the menu bar or re-run the install script.")
+			fmt.Println("\nSome checks failed. Run: snitch start")
 			return nil
 		}
-		fmt.Println("\nAll checks passed. Snitch Bar manages the daemon — use Start/Stop Snitching in the menu to pause or resume.")
+		fmt.Println("\nAll checks passed. Use Start/Stop Snitching in the menu bar to pause or resume.")
 		return nil
 	},
 }
