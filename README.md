@@ -1,8 +1,14 @@
+<p align="center">
+  <img src="docs/snitch_logo.png" alt="Snitch logo" width="320">
+</p>
 
+<p align="center"><strong>Catch the model lying in prose.</strong></p>
 
-**Catch the model lying in prose.**
-
-Snitch is a deterministic [Cursor](https://cursor.com) prose lie detector daemon for macOS. It watches agent transcripts, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls, tool output, filesystem, git, and same-turn consistency.
+<p align="center">
+  <span style="display: inline-block; max-width: 720px; text-align: justify;">
+    Snitch is a deterministic <a href="https://cursor.com">Cursor</a> prose lie detector daemon for macOS. It watches agent transcripts, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls, tool output, filesystem, git, and same-turn consistency.
+  </span>
+</p>
 
 ## Install
 
