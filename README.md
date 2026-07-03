@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/snitch_logo.png" alt="Snitch logo" width="320">
+  <img src="docs/snitch_logo" alt="Snitch logo" width="320">
 </p>
 
 <p align="center"><strong>Catch the model lying in prose.</strong></p>
