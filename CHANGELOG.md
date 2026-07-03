@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.4 — 2026-07-03
+
+### Fixed
+
+- Homebrew upgrade failed with `No such file or directory - Snitch Bar.app` because release tarballs flattened the app bundle; install block now accepts flat `Contents/` layout and archives preserve `Snitch Bar.app/` again
+
 ## 0.1.3 — 2026-07-03
 
 ### Changed

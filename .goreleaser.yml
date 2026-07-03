@@ -47,8 +47,8 @@ archives:
       - scripts/install.sh
       - install/macos/Snitch-Bar-Info.plist
       - install/macos/com.snitch.menubar.plist
-      - src: "dist/snitchbar_{{ .Target }}/Snitch Bar.app"
-        dst: "."
+      - src: "dist/snitchbar_{{ .Target }}/Snitch Bar.app/**"
+        dst: "Snitch Bar.app"
 
 checksum:
   name_template: checksums.txt
@@ -76,7 +76,14 @@ brews:
     install: |
       bin.install "snitch"
       bin.install "snitchd"
-      prefix.install "Snitch Bar.app"
+      if File.directory?("Snitch Bar.app")
+        prefix.install "Snitch Bar.app"
+      elsif File.directory?("Contents")
+        (prefix/"Snitch Bar.app").install "Contents"
+      else
+        system buildpath/"scripts/bundle-snitchbar.sh", buildpath/"snitchbar", version, buildpath/"snitchd"
+        prefix.install "Snitch Bar.app"
+      end
       (share/"snitch").install "install/macos/com.snitch.menubar.plist"
     post_install: |
       home = Dir.home
