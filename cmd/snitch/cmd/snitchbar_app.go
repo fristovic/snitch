@@ -51,7 +51,19 @@ func findSnitchBarApp() (string, error) {
 }
 
 func snitchBarBundleValid(app string) bool {
-	return fileExists(filepath.Join(app, "Contents", "MacOS", "snitchbar"))
+	for _, p := range snitchBarExecutables(app) {
+		if fileExists(p) {
+			return true
+		}
+	}
+	return false
+}
+
+func snitchBarExecutables(app string) []string {
+	return []string{
+		filepath.Join(app, "Contents", "MacOS", "snitchbar"),
+		filepath.Join(app, "MacOS", "snitchbar"),
+	}
 }
 
 func brewPrefix(formula string) (string, error) {

@@ -47,8 +47,8 @@ archives:
       - scripts/install.sh
       - install/macos/Snitch-Bar-Info.plist
       - install/macos/com.snitch.menubar.plist
-      - src: "dist/snitchbar_{{ .Target }}/Snitch Bar.app/**"
-        dst: "Snitch Bar.app"
+      - src: "dist/snitchbar_{{ .Target }}/Snitch Bar.app"
+        dst: "."
 
 checksum:
   name_template: checksums.txt
@@ -86,6 +86,14 @@ brews:
         File.delete(daemon_plist)
       end
       app_path = File.join(opt_prefix, "Snitch Bar.app")
+      contents = File.join(app_path, "Contents")
+      unless File.directory?(File.join(contents, "MacOS"))
+        %w[MacOS Resources Info.plist].each do |name|
+          src = File.join(app_path, name)
+          FileUtils.mkdir_p(contents)
+          FileUtils.mv(src, File.join(contents, name)) if File.exist?(src)
+        end
+      end
       plist_src = File.join(share, "snitch", "com.snitch.menubar.plist")
       plist_dest = File.join(home, "Library/LaunchAgents/com.snitch.menubar.plist")
       if File.exist?(plist_src) && File.directory?(app_path)
