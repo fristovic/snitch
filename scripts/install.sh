@@ -5,9 +5,11 @@ set -euo pipefail
 
 REPO="${SNITCH_REPO:-fristovic/snitch}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+SHARE_DIR="${SHARE_DIR:-$HOME/.local/share/snitch}"
 DATA_DIR="${DATA_DIR:-$HOME/.snitch}"
 VERSION="${SNITCH_VERSION:-}"
 INSTALL_FROM_SOURCE="${SNITCH_INSTALL_FROM_SOURCE:-0}"
+MENUBAR="${SNITCH_MENUBAR:-1}"
 
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn()  { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -64,9 +66,22 @@ download_release() {
     return 1
   fi
   tar -xzf "${tmp}/${archive}" -C "$tmp"
-  mkdir -p "$INSTALL_DIR" "$DATA_DIR"
+  if [[ -f "${tmp}/snitchbar" && ! -d "${tmp}/Snitch Bar.app" && -x "${tmp}/scripts/bundle-snitchbar.sh" ]]; then
+    "${tmp}/scripts/bundle-snitchbar.sh" "${tmp}/snitchbar" "${ver}" "${tmp}/snitchd"
+  fi
+  mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$SHARE_DIR"
   install -m 755 "${tmp}/snitch" "${INSTALL_DIR}/snitch"
-  install -m 755 "${tmp}/snitchd" "${INSTALL_DIR}/snitchd"
+  if [[ -d "${tmp}/Snitch Bar.app" ]]; then
+    rm -rf "${SHARE_DIR}/Snitch Bar.app"
+    cp -R "${tmp}/Snitch Bar.app" "${SHARE_DIR}/"
+    if [[ -x "${SHARE_DIR}/Snitch Bar.app/Contents/MacOS/snitchd" ]]; then
+      ln -sf "${SHARE_DIR}/Snitch Bar.app/Contents/MacOS/snitchd" "${INSTALL_DIR}/snitchd"
+    elif [[ -f "${tmp}/snitchd" ]]; then
+      install -m 755 "${tmp}/snitchd" "${INSTALL_DIR}/snitchd"
+    fi
+  elif [[ -f "${tmp}/snitchd" ]]; then
+    install -m 755 "${tmp}/snitchd" "${INSTALL_DIR}/snitchd"
+  fi
   rm -rf "$tmp"
   info "Installed binaries to ${INSTALL_DIR}"
 }
@@ -81,41 +96,72 @@ build_from_source() {
     root="$(mktemp -d)"
     info "Cloning source..."
     git clone --depth 1 "https://github.com/${REPO}.git" "$root"
-    mkdir -p "$INSTALL_DIR" "$DATA_DIR"
+    mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$SHARE_DIR"
     info "Building from source..."
     (cd "$root" && go build -ldflags "-s -w -X github.com/fristovic/snitch/internal/version.Version=${ver}" -o "${INSTALL_DIR}/snitchd" ./cmd/snitchd)
     (cd "$root" && go build -ldflags "-s -w -X github.com/fristovic/snitch/internal/version.Version=${ver}" -o "${INSTALL_DIR}/snitch" ./cmd/snitch)
+    (cd "$root" && CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/fristovic/snitch/internal/version.Version=${ver}" -o "${INSTALL_DIR}/snitchbar" ./cmd/snitchbar)
+    (cd "$root" && ./scripts/bundle-snitchbar.sh "${INSTALL_DIR}/snitchbar" "${ver}" "${INSTALL_DIR}/snitchd")
+    rm -rf "${SHARE_DIR}/Snitch Bar.app"
+    cp -R "${INSTALL_DIR}/Snitch Bar.app" "${SHARE_DIR}/"
+    rm -rf "${INSTALL_DIR}/Snitch Bar.app"
+    rm -f "${INSTALL_DIR}/snitchbar"
     rm -rf "$root"
   else
-    mkdir -p "$INSTALL_DIR" "$DATA_DIR"
+    mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$SHARE_DIR"
     info "Building from source..."
     (cd "$root" && go build -ldflags "-s -w -X github.com/fristovic/snitch/internal/version.Version=${ver}" -o "${INSTALL_DIR}/snitchd" ./cmd/snitchd)
     (cd "$root" && go build -ldflags "-s -w -X github.com/fristovic/snitch/internal/version.Version=${ver}" -o "${INSTALL_DIR}/snitch" ./cmd/snitch)
+    (cd "$root" && CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/fristovic/snitch/internal/version.Version=${ver}" -o "${INSTALL_DIR}/snitchbar" ./cmd/snitchbar)
+    (cd "$root" && ./scripts/bundle-snitchbar.sh "${INSTALL_DIR}/snitchbar" "${ver}" "${INSTALL_DIR}/snitchd")
+    rm -rf "${SHARE_DIR}/Snitch Bar.app"
+    cp -R "${INSTALL_DIR}/Snitch Bar.app" "${SHARE_DIR}/"
+    rm -rf "${INSTALL_DIR}/Snitch Bar.app"
+    rm -f "${INSTALL_DIR}/snitchbar"
   fi
   info "Built and installed to ${INSTALL_DIR}"
 }
 
-install_daemon_macos() {
+install_legacy_daemon_cleanup() {
   local plist_dest="$HOME/Library/LaunchAgents/com.snitch.daemon.plist"
-  local plist_src="${DATA_DIR}/com.snitch.daemon.plist"
+  launchctl bootout "gui/$(id -u)/com.snitch.daemon" 2>/dev/null || \
+    launchctl unload "$plist_dest" 2>/dev/null || true
+  if [[ -f "$plist_dest" ]]; then
+    rm -f "$plist_dest"
+    info "Removed legacy snitchd LaunchAgent (daemon is managed by Snitch Bar)"
+  fi
+}
+
+install_menubar_macos() {
+  if [[ "$MENUBAR" != "1" ]]; then
+    info "Skipping menu bar (SNITCH_MENUBAR=0)"
+    return
+  fi
+  local app="${SHARE_DIR}/Snitch Bar.app/Contents/MacOS/snitchbar"
+  if [[ ! -x "$app" ]]; then
+    warn "Snitch Bar.app not found at ${SHARE_DIR}; skipping menubar LaunchAgent"
+    return
+  fi
+  local plist_dest="$HOME/Library/LaunchAgents/com.snitch.menubar.plist"
+  local plist_src="${DATA_DIR}/com.snitch.menubar.plist"
   if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local candidate="${script_dir}/../install/macos/com.snitch.daemon.plist"
+    local candidate="${script_dir}/../install/macos/com.snitch.menubar.plist"
     if [[ -f "$candidate" ]]; then
       plist_src="$candidate"
     fi
   fi
   if [[ ! -f "$plist_src" ]]; then
-    curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/install/macos/com.snitch.daemon.plist" -o "$plist_src"
+    curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/install/macos/com.snitch.menubar.plist" -o "$plist_src"
   fi
   mkdir -p "$HOME/Library/LaunchAgents"
-  sed "s|__SNITCHD_PATH__|${INSTALL_DIR}/snitchd|g; s|__HOME__|${HOME}|g" "$plist_src" > "$plist_dest"
-  launchctl bootout "gui/$(id -u)/com.snitch.daemon" 2>/dev/null || \
+  sed "s|__SNITCHBAR_APP__|${SHARE_DIR}/Snitch Bar.app|g; s|__HOME__|${HOME}|g" "$plist_src" > "$plist_dest"
+  launchctl bootout "gui/$(id -u)/com.snitch.menubar" 2>/dev/null || \
     launchctl unload "$plist_dest" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$plist_dest" 2>/dev/null || \
     launchctl load "$plist_dest"
-  info "Daemon registered (LaunchAgent)"
+  info "Menu bar registered (LaunchAgent)"
 }
 
 ensure_path() {
@@ -161,20 +207,27 @@ ${marker_end}"
 print_next_steps() {
   cat <<EOF
 
-Snitch is installed — watching Cursor transcripts.
+Snitch is installed.
 
-  snitch doctor          # verify install + Cursor
-  snitch status          # daemon health
-  snitch lies            # caught lies
-  snitch log --watch     # live failures
-  snitch dashboard       # interactive TUI
+Snitch Bar manages the lie detector — it opens from your menu bar at login (or open it manually).
+Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume.
+
+  snitch status           # daemon health (when Snitching...)
+  snitch lies             # full lie history
+
+Advanced:
+  snitch log              # failed runs (power users; --watch overlaps menu bar)
+  snitch dashboard        # interactive TUI
 
 Open a new terminal (or: exec \$SHELL) if PATH was updated.
 
-Homebrew (recommended):
+Homebrew:
   brew tap fristovic/snitch
   brew install snitch
-  brew services start snitch
+  open "\$(brew --prefix)/opt/snitch/Snitch Bar.app"
+
+curl / manual:
+  open "\$HOME/.local/share/snitch/Snitch Bar.app"
 
 EOF
 }
@@ -203,8 +256,10 @@ main() {
     fi
   fi
 
-  install_daemon_macos
-  launchctl kickstart -k "gui/$(id -u)/com.snitch.daemon" 2>/dev/null || true
+  install_legacy_daemon_cleanup
+
+  install_menubar_macos
+  launchctl kickstart -k "gui/$(id -u)/com.snitch.menubar" 2>/dev/null || true
 
   ensure_path
   configure_path

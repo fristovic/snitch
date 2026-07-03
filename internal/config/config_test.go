@@ -16,6 +16,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Display.TUI.MaxRunsVisible != 100 {
 		t.Fatalf("expected max runs 100, got %d", cfg.Display.TUI.MaxRunsVisible)
 	}
+	if !cfg.Notifications.Enabled {
+		t.Fatal("notifications should be enabled by default")
+	}
+	if cfg.Notifications.RateLimitS != 5 {
+		t.Fatalf("expected rate limit 5, got %d", cfg.Notifications.RateLimitS)
+	}
 }
 
 func TestLoadMissingFile(t *testing.T) {

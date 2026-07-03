@@ -13,14 +13,21 @@ Goreleaser publishes the `snitch` formula here on each release tag.
 ```bash
 brew tap fristovic/snitch
 brew install snitch
-brew services start snitch
+open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
 snitch doctor
 ```
+
+Snitch Bar manages the lie detector. Use **Start Snitching** / **Stop Snitching** in the menu bar — no `brew services` step.
 
 ## Uninstall
 
 ```bash
-brew services stop snitch
 brew uninstall snitch
 # or: snitch uninstall --purge
+```
+
+If you upgraded from an older install that used the legacy daemon LaunchAgent:
+
+```bash
+brew services stop snitch
 ```

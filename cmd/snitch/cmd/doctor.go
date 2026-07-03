@@ -43,10 +43,13 @@ var doctorCmd = &cobra.Command{
 		if running {
 			_ = client.Close()
 		}
-		printCheck("snitchd daemon", running, sock)
+		printCheck("snitchd running", running, sock)
 
-		plist := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.snitch.daemon.plist")
-		printCheck("LaunchAgent", fileExists(plist), plist)
+		menubarPlist := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.snitch.menubar.plist")
+		printCheck("Snitch Bar LaunchAgent", fileExists(menubarPlist), menubarPlist)
+
+		shareApp := filepath.Join(os.Getenv("HOME"), ".local", "share", "snitch", "Snitch Bar.app")
+		printCheck("Snitch Bar.app", fileExists(filepath.Join(shareApp, "Contents", "MacOS", "snitchbar")), shareApp)
 
 		cursorApp := fileExists("/Applications/Cursor.app")
 		cursorData := fileExists(filepath.Join(os.Getenv("HOME"), ".cursor"))
@@ -61,10 +64,10 @@ var doctorCmd = &cobra.Command{
 		printCheck("transcript watch path", fileExists(watch), watch)
 
 		if !ok {
-			fmt.Println("\nSome checks failed. Try: brew services restart snitch  OR  curl install script")
+			fmt.Println("\nSome checks failed. Open Snitch Bar from the menu bar or re-run the install script.")
 			return nil
 		}
-		fmt.Println("\nAll checks passed. Use Cursor — Snitch watches agent turns automatically.")
+		fmt.Println("\nAll checks passed. Snitch Bar manages the daemon — use Start/Stop Snitching in the menu to pause or resume.")
 		return nil
 	},
 }
@@ -78,11 +81,24 @@ var uninstallCmd = &cobra.Command{
 		_ = exec.Command("launchctl", "unload", plist).Run()
 		if fileExists(plist) {
 			_ = os.Remove(plist)
-			fmt.Println("removed LaunchAgent")
+			fmt.Println("removed legacy daemon LaunchAgent")
+		}
+		menubarPlist := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.snitch.menubar.plist")
+		_ = exec.Command("launchctl", "bootout", fmt.Sprintf("gui/%d/com.snitch.menubar", os.Getuid())).Run()
+		_ = exec.Command("launchctl", "unload", menubarPlist).Run()
+		if fileExists(menubarPlist) {
+			_ = os.Remove(menubarPlist)
+			fmt.Println("removed Snitch Bar LaunchAgent")
 		}
 		_ = exec.Command("brew", "services", "stop", "snitch").Run()
 
-		for _, name := range []string{"snitch", "snitchd"} {
+		shareApp := filepath.Join(os.Getenv("HOME"), ".local", "share", "snitch", "Snitch Bar.app")
+		if fileExists(shareApp) {
+			_ = os.RemoveAll(shareApp)
+			fmt.Println("removed Snitch Bar.app")
+		}
+
+		for _, name := range []string{"snitch", "snitchd", "snitchbar"} {
 			if p, ok := findBinary(name); ok {
 				if err := os.Remove(p); err == nil {
 					fmt.Printf("removed %s\n", p)
@@ -98,7 +114,7 @@ var uninstallCmd = &cobra.Command{
 		} else {
 			fmt.Println("kept ~/.snitch data (use --purge to remove)")
 		}
-		fmt.Println("Homebrew users: brew services stop snitch && brew uninstall snitch")
+		fmt.Println("Homebrew users: brew uninstall snitch")
 		return nil
 	},
 }

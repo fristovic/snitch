@@ -26,5 +26,10 @@ func Default() *Config {
 		Display: DisplayConfig{
 			TUI: TUIConfig{MaxRunsVisible: 100, RefreshMS: 500},
 		},
+		Notifications: NotificationsConfig{
+			Enabled:    true,
+			OnWarn:     false,
+			RateLimitS: 5,
+		},
 	}
 }

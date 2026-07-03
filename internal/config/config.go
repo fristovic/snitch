@@ -19,6 +19,7 @@ type Config struct {
 	Analytics    AnalyticsConfig    `yaml:"analytics"`
 	Retention    RetentionConfig    `yaml:"retention"`
 	Display      DisplayConfig      `yaml:"display"`
+	Notifications NotificationsConfig `yaml:"notifications"`
 }
 
 type DaemonConfig struct {
@@ -60,6 +61,12 @@ type DisplayConfig struct {
 type TUIConfig struct {
 	MaxRunsVisible int `yaml:"max_runs_visible"`
 	RefreshMS      int `yaml:"refresh_ms"`
+}
+
+type NotificationsConfig struct {
+	Enabled    bool `yaml:"enabled"`
+	OnWarn     bool `yaml:"on_warn"`
+	RateLimitS int  `yaml:"rate_limit_s"`
 }
 
 // Load reads configuration from path. Missing file returns defaults.
@@ -125,6 +132,16 @@ func (c *Config) Set(key, value string) error {
 			return err
 		}
 		c.Retention.MaxDays = v
+	case "notifications.enabled":
+		c.Notifications.Enabled = value == "true"
+	case "notifications.on_warn":
+		c.Notifications.OnWarn = value == "true"
+	case "notifications.rate_limit_s":
+		v, err := strconv.Atoi(value)
+		if err != nil {
+			return err
+		}
+		c.Notifications.RateLimitS = v
 	default:
 		if c.Verification.ShellVerifier.AllowRerun == nil {
 			c.Verification.ShellVerifier.AllowRerun = make(map[string]bool)
@@ -147,6 +164,12 @@ func (c *Config) Get(key string) (string, error) {
 		return fmt.Sprintf("%v", c.Analytics.Enabled), nil
 	case "retention.max_days":
 		return fmt.Sprintf("%d", c.Retention.MaxDays), nil
+	case "notifications.enabled":
+		return fmt.Sprintf("%v", c.Notifications.Enabled), nil
+	case "notifications.on_warn":
+		return fmt.Sprintf("%v", c.Notifications.OnWarn), nil
+	case "notifications.rate_limit_s":
+		return fmt.Sprintf("%d", c.Notifications.RateLimitS), nil
 	default:
 		prefix := "shell_verifier.allow_rerun."
 		if strings.HasPrefix(key, prefix) {

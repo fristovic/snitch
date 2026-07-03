@@ -20,15 +20,35 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w -X github.com/fristovic/snitch/internal/version.Version={{.Version}}
+  - id: snitchbar
+    main: ./cmd/snitchbar
+    binary: snitchbar
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    env:
+      - CGO_ENABLED=1
+    ldflags:
+      - -s -w -X github.com/fristovic/snitch/internal/version.Version={{.Version}}
+    hooks:
+      post:
+        - cmd: ./scripts/bundle-snitchbar.sh {{ .Path }} {{ .Version }}
+          env:
+            - SNITCHD_PATH={{ dir .Path }}/../snitchd_{{ .Target }}/snitchd
 
 archives:
   - id: default
-    builds: [snitchd, snitch]
+    builds: [snitchd, snitch, snitchbar]
     name_template: "snitch_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
     files:
       - LICENSE
       - README.md
+      - scripts/bundle-snitchbar.sh
+      - scripts/install.sh
+      - install/macos/Snitch-Bar-Info.plist
+      - install/macos/com.snitch.menubar.plist
+      - src: "dist/snitchbar_{{ .Os }}_{{ .Arch }}/Snitch Bar.app/**"
+        dst: "Snitch Bar.app"
 
 checksum:
   name_template: checksums.txt
@@ -53,11 +73,34 @@ brews:
     homepage: "https://github.com/fristovic/snitch"
     description: "Catch Cursor agent lies in prose — local lie detector"
     license: "MIT"
-    service: |
-      run opt_bin/"snitchd"
-      keep_alive true
-      log_path "~/Library/Logs/snitch/snitchd.log"
-      error_log_path "~/Library/Logs/snitch/snitchd.log"
+    install: |
+      bin.install "snitch"
+      bin.install "snitchd"
+      prefix.install "Snitch Bar.app"
+      (share/"snitch").install "install/macos/com.snitch.menubar.plist"
+    post_install: |
+      home = Dir.home
+      daemon_plist = File.join(home, "Library/LaunchAgents/com.snitch.daemon.plist")
+      if File.exist?(daemon_plist)
+        system "launchctl", "bootout", "gui/#{Process.uid}/com.snitch.daemon" rescue nil
+        File.delete(daemon_plist)
+      end
+      app_path = File.join(opt_prefix, "Snitch Bar.app")
+      plist_src = File.join(share, "snitch", "com.snitch.menubar.plist")
+      plist_dest = File.join(home, "Library/LaunchAgents/com.snitch.menubar.plist")
+      if File.exist?(plist_src) && File.directory?(app_path)
+        content = File.read(plist_src).gsub("__SNITCHBAR_APP__", app_path).gsub("__HOME__", home)
+        FileUtils.mkdir_p(File.dirname(plist_dest))
+        File.write(plist_dest, content)
+        system "launchctl", "bootout", "gui/#{Process.uid}/com.snitch.menubar" rescue nil
+        system "launchctl", "bootstrap", "gui/#{Process.uid}", plist_dest rescue system("launchctl", "load", plist_dest)
+      end
+    caveats: |
+      Snitch Bar manages the lie detector automatically.
+      Open after install:
+        open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
+      Use Start Snitching / Stop Snitching in the menu bar to pause or resume.
+      No brew services step — the menubar LaunchAgent opens Snitch Bar at login.
 
 release:
   github:

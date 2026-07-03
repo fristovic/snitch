@@ -26,6 +26,6 @@ func init() {
 }
 
 func daemonNotRunning() {
-	fmt.Fprintln(os.Stderr, "snitchd is not running. Start it with: snitchd")
+	fmt.Fprintln(os.Stderr, "lie detector is not running. Open Snitch Bar from the menu bar, or choose Start Snitching from its menu.")
 	os.Exit(1)
 }

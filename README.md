@@ -17,9 +17,10 @@
 ```bash
 brew tap fristovic/snitch
 brew install snitch
-brew services start snitch
-snitch doctor
+open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
 ```
+
+Snitch Bar starts the lie detector automatically. Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume — no `brew services` step needed.
 
 ### macOS (curl)
 
@@ -35,35 +36,59 @@ From a cloned repo:
 ./scripts/install.sh
 ```
 
+After install, open Snitch Bar:
+
+```bash
+open "$HOME/.local/share/snitch/Snitch Bar.app"
+```
+
 ### What the installer does
 
-1. Downloads or builds `snitch` + `snitchd`
-2. Installs to `~/.local/bin` (or Homebrew cellar)
-3. Registers a LaunchAgent / `brew services` entry for `snitchd`
+1. Downloads or builds `snitch` CLI and **Snitch Bar.app** (includes `snitchd` inside the app)
+2. Installs CLI to `~/.local/bin`
+3. Installs **Snitch Bar.app** to `~/.local/share/snitch/`
+4. Registers a LaunchAgent to open Snitch Bar at login
 
 ## Quick start
 
+Open **Snitch Bar** from your menu bar. It starts the lie detector automatically and shows **Snitching...** when ready.
+
+Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume.
+
+When the model lies, the icon alerts and macOS may show a notification. Use **Copy Last Lie** in the menu (or `snitch lies` in Terminal) to see details.
+
 ```bash
-snitch doctor           # verify install + Cursor
 snitch status           # daemon health
-snitch lies             # caught lies
-snitch log --watch      # live failed runs
-snitch dashboard        # interactive TUI
+snitch lies             # full lie history
 ```
 
-Snitch runs passively after install — it reads `~/.cursor/projects/**/agent-transcripts/*.jsonl`.
-
-## CLI
+## Commands
 
 | Command              | Description                                                       |
 | -------------------- | ----------------------------------------------------------------- |
-| `snitch doctor`      | Check daemon, Cursor, and transcript paths                        |
+| **Menu bar**         | Starts/stops daemon; alert icon, Start/Stop Snitching, Copy Last Lie |
 | `snitch status`      | Daemon health (`--detailed` for lie stats)                        |
 | `snitch lies`        | List caught lies (`--type`, `--project`, `--since`, `--json`)     |
-| `snitch log`         | Run log with filters (`--type`, `--search`, `--since`, `--watch`) |
-| `snitch dashboard`   | Interactive filtering TUI                                         |
+| `snitch log`         | Run log (advanced; `--watch` duplicates menu bar live updates)    |
+| `snitch dashboard`   | Interactive TUI (advanced)                                        |
+| `snitch doctor`      | Debug install checklist                                           |
 | `snitch uninstall`   | Remove daemon and binaries (`--purge` for data)                   |
 | `snitch config`      | View/set configuration                                            |
+
+Snitch runs passively after install — it reads `~/.cursor/projects/**/agent-transcripts/*.jsonl`.
+
+### Notifications
+
+When `snitchd` catches a lie, macOS Notification Center can alert you (enabled by default). Configure in `~/.snitch/config.yaml`:
+
+```yaml
+notifications:
+  enabled: true
+  on_warn: false
+  rate_limit_s: 5
+```
+
+The first notification triggers the macOS permission prompt.
 
 ## Lie types
 

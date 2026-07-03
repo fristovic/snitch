@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/ipc"
-	"github.com/fristovic/snitch/internal/platform"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +15,7 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show daemon status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		sock := resolveSocket()
+		sock := ipc.ResolveSocket(socketPath)
 		client, err := ipc.Connect(sock)
 		if err != nil {
 			daemonNotRunning()
@@ -41,7 +39,7 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("sessions seen: %d\n", st.SessionsSeen)
 
 		if st.TotalRuns == 0 {
-			fmt.Println("\nwatching — trigger a Cursor agent turn to see results")
+			fmt.Println("\nSnitching — trigger a Cursor agent turn to see results")
 		}
 
 		if !statusDetailed {
@@ -78,14 +76,3 @@ func init() {
 	statusCmd.Flags().BoolVar(&statusDetailed, "detailed", false, "Show lie statistics and recent failures")
 }
 
-func resolveSocket() string {
-	if socketPath != "" {
-		return socketPath
-	}
-	paths, _ := platform.Resolve()
-	cfg, _ := config.Load(paths.ConfigPath)
-	if cfg.Daemon.SocketPath != "" {
-		return cfg.Daemon.SocketPath
-	}
-	return paths.SocketPath
-}

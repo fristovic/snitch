@@ -12,22 +12,42 @@
 ```bash
 brew tap fristovic/snitch
 brew install snitch
-brew services start snitch
-snitch doctor
+open "$(brew --prefix)/opt/snitch/Snitch Bar.app"
 ```
+
+The curl installer also registers Snitch Bar to open at login.
 
 ### curl installer
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fristovic/snitch/main/scripts/install.sh | bash
+open "$HOME/.local/share/snitch/Snitch Bar.app"
 ```
 
 Verify:
 
 ```bash
-snitch doctor
 snitch status
 ```
+
+Look for the Snitch icon in the menu bar. Click it for status, **Copy Last Lie**, or **Browse lies…** (`snitch lies` in Terminal).
+
+## Menu bar (Snitch Bar)
+
+Snitch Bar is the main app (no Dock icon). It **starts `snitchd` automatically** when you open it.
+
+- **Snitching...** status when the lie detector is active
+- **Start Snitching** / **Stop Snitching** — pause / resume lie detection
+- **Copy Last Lie** and **Browse lies…**
+- **Quit Snitch Bar** stops the daemon
+
+If Snitch is paused or offline, choose **Start Snitching** to resume.
+
+Disable login auto-start: `SNITCH_MENUBAR=0 ./scripts/install.sh`
+
+## Notifications
+
+When a lie is caught, `snitchd` can send a macOS notification (title: claim type, body: claimed → actual). Enabled by default; configure under `notifications` in `~/.snitch/config.yaml`. macOS will prompt for notification permission on the first alert.
 
 ## How it works
 
@@ -42,10 +62,6 @@ A **snitch** is a high-confidence prose claim that evidence contradicts.
 
 ## Commands
 
-### `snitch doctor`
-
-Check daemon, binaries, LaunchAgent, Cursor install, and transcript watch path.
-
 ### `snitch lies`
 
 List caught lies:
@@ -57,19 +73,19 @@ snitch lies --project ~/code/myapp --since 24h
 snitch lies --json
 ```
 
-### `snitch log`
+### `snitch log` (advanced)
 
-Show runs (failed by default):
+Show runs (failed by default). The menu bar already reflects new lies and alerts; `--watch` is mainly for Terminal-only workflows:
 
 ```bash
 snitch log
 snitch log --all
 snitch log --run <id>
 snitch log --type committed --search "refactor"
-snitch log --watch
+snitch log --watch   # live tail; overlaps Snitch Bar updates
 ```
 
-### `snitch dashboard`
+### `snitch dashboard` (advanced)
 
 Interactive TUI with live updates:
 
@@ -95,8 +111,13 @@ snitch uninstall --purge  # also remove ~/.snitch
 Homebrew users:
 
 ```bash
-brew services stop snitch
 brew uninstall snitch
+```
+
+If you upgraded from an older install that used `brew services start snitch`, stop the legacy service first:
+
+```bash
+brew services stop snitch
 ```
 
 ## Configuration

@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Menu-bar-first docs and messaging: **Start/Stop Snitching** (not "Watching"); lie preview removed from dropdown
+- `daemonNotRunning()` and `snitch doctor` point users to Snitch Bar / Start Snitching
+- curl install no longer leaves orphan `snitchbar` binary on PATH (app bundle only)
+- Homebrew: open `$(brew --prefix)/opt/snitch/Snitch Bar.app`; post_install registers menubar plist and removes legacy daemon agent
+- Release archives include **Snitch Bar.app**; legacy `com.snitch.daemon.plist` moved to `install/macos/legacy/`
+- ARCHITECTURE.md documents Snitch Bar, notifications, and menu bar flow
+
+## 0.1.1 — 2026-07-03
+
+### Added
+
+- **Snitch Bar** menu bar app (`snitchbar`) — alerts on new lies, no Dock icon
+- macOS Notification Center alerts from `snitchd` when a lie is caught (configurable)
+- `internal/notify` package and `notifications` config block
+- Menubar LaunchAgent (`com.snitch.menubar`) in curl installer (default on)
+- **Start/Stop Snitching** — Snitch Bar starts/stops `snitchd`; daemon bundled inside `Snitch Bar.app`
+
+### Changed
+
+- Snitch Bar owns the daemon lifecycle (no separate `brew services` / daemon LaunchAgent)
+- Install script and README promote menu bar + `snitch lies` as primary UX
+- `log`, `dashboard`, and `doctor` de-emphasized to advanced/debug use
+- CI: upgrade `golangci-lint-action` to v9 (Node 24)
+
 ## 0.1.0 — 2026-07-02
 
 ### Added
