@@ -10,13 +10,16 @@ Snitch is a **lie detector** for Cursor on macOS. It extracts claims from assist
 Cursor transcript JSONL (+ terminal files fallback)
         │
         ▼
- transcript.Watcher  ──► TurnCompleted (prose, tool_use, tool_result, start HEAD)
+ transcript.Watcher  ──► TurnCompleted (prose, tool_use, tool_result, start/end HEAD, file manifest)
         │
         ▼
  capture.Engine      ──► RunCaptured
         │
         ▼
- verify.Engine       ──► prose + consistency + tool claims → verifiers → SQLite
+ verify.Engine       ──► enrich context (subagent merge, 3-turn lookback, prose segments)
+        │                    │
+        │                    ▼
+        │              verifiers → SQLite (+ turn snapshots)
         │                    │
         │                    ▼
         │              internal/notify (macOS alerts on fail)
@@ -49,13 +52,24 @@ Cursor transcript JSONL (+ terminal files fallback)
 4. On `subscribe` events with failed runs, icon enters alert state; optional Notification Center alert from `snitchd`.
 5. **Show Last Lie** loads the latest lie via IPC (`loadLatestLie`) and opens `snitch log --run <id>` in Terminal.
 
+## Evidence enrichment pipeline
+
+After capture, `verify.BuildVerifyContext` assembles evidence before verifiers run:
+
+1. **Prose segmentation** — split execution vs recap (`### Summary`, `## Summary`, `---`)
+2. **Subagent merge** — `transcript.LoadSubagentToolCalls` merges `subagents/*.jsonl` tool calls whose turns overlap the parent window
+3. **Session lookback** — load up to 3 prior turn payloads from SQLite (`runs.payload_json`)
+4. **Severity calibration** — recap claims and low-confidence prose adjust severity after verification
+
+Turn snapshots persist `payload_json`, `start_head`, `end_head`, and `file_manifest_json` for the next turn's baseline.
+
 ## Prose lie detection
 
 `verify.ExtractProseClaims` uses deterministic regex patterns (high precision, low recall).
 
 `verifiers.ContradictionVerifier` checks prose claims against:
 
-- **Tool calls** in the same turn (`Shell`, `Write`, `StrReplace`, `Delete`)
+- **Tool calls** in the same turn plus subagent merges and (for eligible claim types) up to 3 prior turns
 - **Captured shell output** — `tool_result` on the call, or Cursor `terminals/*.txt` matched by command + time window
 - **Filesystem** for file claims and stub/placeholder bodies
 - **Git** `startHEAD..HEAD` for commit claims (baseline captured when the turn starts)

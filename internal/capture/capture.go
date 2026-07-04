@@ -33,6 +33,8 @@ type RunPayload struct {
 	Command        string                `json:"command,omitempty"`
 	StartedAt      time.Time             `json:"started_at"`
 	FinishedAt     time.Time             `json:"finished_at"`
+	EndHEAD        string                `json:"end_head,omitempty"`
+	FileManifest   map[string]string     `json:"file_manifest,omitempty"`
 }
 
 // Engine builds RunCaptured events from completed Cursor turns.
@@ -100,6 +102,8 @@ func (e *Engine) onTurnCompleted(ev event.Event) {
 		Command:        command,
 		StartedAt:      turn.StartedAt,
 		FinishedAt:     turn.FinishedAt,
+		EndHEAD:        turn.EndHEAD,
+		FileManifest:   turn.FileManifest,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

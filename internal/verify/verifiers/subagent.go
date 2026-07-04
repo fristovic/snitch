@@ -76,6 +76,14 @@ func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		return r, nil
 	}
 
+	merged, _ := transcript.LoadSubagentToolCalls(ctx.TranscriptPath, ctx.StartedAt, ctx.FinishedAt)
+	if taskCount > 0 && len(merged) == 0 && !ctx.StartedAt.IsZero() && !ctx.FinishedAt.IsZero() {
+		r.Accurate = false
+		r.Severity = severity.Level1
+		r.GroundTruth = "subagent transcripts exist but no tool calls in turn window"
+		return r, nil
+	}
+
 	r.Accurate = true
 	r.GroundTruth = transcript.SessionIDFromTranscriptPath(ctx.TranscriptPath) + ": " +
 		formatSize(int64(nonEmpty)) + " subagent transcript(s)"

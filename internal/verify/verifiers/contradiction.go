@@ -38,7 +38,7 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 		return v.verifyStub(ctx, cwd)
 
 	case ClaimCommitted:
-		if hasGitCommitShell(ctx.ToolCalls) || hasNewCommit(cwd, ctx.StartHEAD) {
+		if HasCommitEvidence(ctx) {
 			r.Accurate = true
 			r.GroundTruth = "commit evidence found"
 			return r, nil
@@ -49,7 +49,7 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 		return r, nil
 
 	case ClaimPushed:
-		if hasGitPushShell(ctx.ToolCalls) {
+		if HasPushEvidence(ctx) {
 			r.Accurate = true
 			r.GroundTruth = "git push shell call found"
 			return r, nil
@@ -60,22 +60,22 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 		return r, nil
 
 	case ClaimFileCreated:
-		return v.verifyFileClaim(c, ctx, cwd, "Write", severity.Level3, "created")
+		return v.verifyFileClaim(c, ctx, cwd, []string{"Write", "StrReplace"}, severity.Level3, "created")
 
 	case ClaimFileModified:
-		return v.verifyFileClaim(c, ctx, cwd, "StrReplace", severity.Level2, "modified")
+		return v.verifyFileClaim(c, ctx, cwd, []string{"StrReplace", "Write"}, severity.Level2, "modified")
 
 	case ClaimFileDeleted:
-		return v.verifyFileClaim(c, ctx, cwd, "Delete", severity.Level3, "deleted")
+		return v.verifyFileClaim(c, ctx, cwd, []string{"Delete", "StrReplace"}, severity.Level3, "deleted")
 
 	case ClaimCommandRan:
-		if len(ctx.ToolCalls) == 0 {
+		if len(ctx.ToolCalls) == 0 && !HasShellEvidence(ctx) {
 			r.Accurate = false
 			r.Severity = severity.Level2
 			r.GroundTruth = "claimed command ran but no tool calls"
 			return r, nil
 		}
-		if hasShellCall(ctx.ToolCalls) {
+		if HasShellEvidence(ctx) {
 			r.Accurate = true
 			r.GroundTruth = "shell command found in tool calls"
 			return r, nil
@@ -86,7 +86,7 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 		return r, nil
 
 	case ClaimNoAction:
-		if len(ctx.ToolCalls) > 0 {
+		if hasMutatingToolCalls(ctx.ToolCalls) {
 			r.Accurate = true
 			r.GroundTruth = "tool calls present"
 			return r, nil
@@ -105,18 +105,22 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 
 func (v *ContradictionVerifier) verifyTestPass(ctx VerifyContext) (Result, error) {
 	r := Result{Verifier: v.Name(), Severity: severity.Level0}
-	if !hasTestShell(ctx.ToolCalls) {
+	calls := AllToolCalls(ctx)
+	if !HasTestShellEvidence(ctx) {
 		r.Accurate = false
 		r.Severity = severity.Level3
 		r.GroundTruth = "claimed tests pass but ran no tests"
 		return r, nil
 	}
-	for _, tc := range ctx.ToolCalls {
+	for _, tc := range calls {
 		if tc.Name != "Shell" || !isTestCommand(shellCommand(tc)) {
 			continue
 		}
 		out, code, found := ShellOutputForCommand(tc, ctx)
 		if !found {
+			if tc.Result == "" && !tc.IsError {
+				continue
+			}
 			r.Accurate = true
 			r.GroundTruth = "test command found (output not captured)"
 			return r, nil
@@ -148,13 +152,14 @@ func (v *ContradictionVerifier) verifyTestPass(ctx VerifyContext) (Result, error
 
 func (v *ContradictionVerifier) verifyCommandSucceeded(ctx VerifyContext) (Result, error) {
 	r := Result{Verifier: v.Name(), Severity: severity.Level0}
-	if !hasShellCall(ctx.ToolCalls) {
+	calls := AllToolCalls(ctx)
+	if !HasShellEvidence(ctx) {
 		r.Accurate = false
 		r.Severity = severity.Level3
 		r.GroundTruth = "claimed success but no shell command ran"
 		return r, nil
 	}
-	for _, tc := range ctx.ToolCalls {
+	for _, tc := range calls {
 		if tc.Name != "Shell" {
 			continue
 		}
@@ -169,6 +174,13 @@ func (v *ContradictionVerifier) verifyCommandSucceeded(ctx VerifyContext) (Resul
 			r.Evidence = []string{truncateEvidence(out)}
 			return r, nil
 		}
+		if passed, ok := ParseTestOutput(out); ok && !passed {
+			r.Accurate = false
+			r.Severity = severity.Level3
+			r.GroundTruth = "shell output indicates failure"
+			r.Evidence = []string{truncateEvidence(out)}
+			return r, nil
+		}
 	}
 	r.Accurate = true
 	r.GroundTruth = "shell command succeeded"
@@ -177,7 +189,7 @@ func (v *ContradictionVerifier) verifyCommandSucceeded(ctx VerifyContext) (Resul
 
 func (v *ContradictionVerifier) verifyStub(ctx VerifyContext, cwd string) (Result, error) {
 	r := Result{Verifier: v.Name(), Severity: severity.Level0}
-	for _, tc := range ctx.ToolCalls {
+	for _, tc := range AllToolCalls(ctx) {
 		if tc.Name != "Write" && tc.Name != "StrReplace" {
 			continue
 		}
@@ -191,13 +203,10 @@ func (v *ContradictionVerifier) verifyStub(ctx VerifyContext, cwd string) (Resul
 		}
 		body := writeBodyFromTool(tc)
 		if body == "" {
-			data, err := os.ReadFile(abs)
-			if err != nil {
-				continue
-			}
-			body = string(data)
+			continue
 		}
-		if IsStubBody(body) {
+		body = stripMarkdownCodeBlocks(body)
+		if IsStubBody(body, abs) {
 			r.Accurate = false
 			r.Severity = severity.Level3
 			r.GroundTruth = "file contains placeholder/stub implementation"
@@ -233,7 +242,7 @@ func truncateEvidence(s string) string {
 	return s
 }
 
-func (v *ContradictionVerifier) verifyFileClaim(c Claim, ctx VerifyContext, cwd, tool string, failSev severity.Level, verb string) (Result, error) {
+func (v *ContradictionVerifier) verifyFileClaim(c Claim, ctx VerifyContext, cwd string, tools []string, failSev severity.Level, verb string) (Result, error) {
 	r := Result{Claim: c, Verifier: v.Name(), Severity: severity.Level0}
 	path := resolveClaimPath(c.Target, cwd)
 	if path == "" {
@@ -243,11 +252,15 @@ func (v *ContradictionVerifier) verifyFileClaim(c Claim, ctx VerifyContext, cwd,
 		return r, nil
 	}
 
-	if !hasToolForPath(ctx.ToolCalls, tool, c.Target, path, cwd) {
+	if !HasFileToolForPath(ctx, c.Target) {
 		r.Accurate = false
 		r.Severity = failSev
-		r.GroundTruth = "claimed file " + verb + " but no matching " + tool + " tool call"
+		r.GroundTruth = "claimed file " + verb + " but no matching tool call"
 		return r, nil
+	}
+
+	if disk := matchedDiskPath(AllToolCalls(ctx), tools, c.Target, cwd); disk != "" {
+		path = disk
 	}
 
 	switch c.Type {
@@ -370,7 +383,62 @@ func shellCommand(tc transcript.ToolCall) string {
 	return ""
 }
 
-func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd string) bool {
+func matchedDiskPath(calls []transcript.ToolCall, toolNames []string, target, cwd string) string {
+	abs := resolveClaimPath(target, cwd)
+	for _, toolName := range toolNames {
+		for _, tc := range calls {
+			if tc.Name != toolName {
+				continue
+			}
+			tcPath := tc.Target
+			if tcPath == "" {
+				tcPath = pathFromInput(tc, toolName)
+			}
+			if pathsMatch(tcPath, target, abs, cwd) {
+				if p := resolveClaimPath(tcPath, cwd); p != "" {
+					return p
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func hasMutatingToolCalls(calls []transcript.ToolCall) bool {
+	readOnly := map[string]bool{
+		"Read": true, "Glob": true, "Grep": true, "SemanticSearch": true,
+	}
+	for _, tc := range calls {
+		if !readOnly[tc.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGitActivityShell(calls []transcript.ToolCall) bool {
+	for _, tc := range calls {
+		if tc.Name != "Shell" {
+			continue
+		}
+		cmd := strings.ToLower(shellCommand(tc))
+		if strings.Contains(cmd, "git commit") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAnyToolForPath(calls []transcript.ToolCall, toolNames []string, target, absPath, cwd string, allowSoftDelete bool) bool {
+	for _, toolName := range toolNames {
+		if hasToolForPath(calls, toolName, target, absPath, cwd, allowSoftDelete) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd string, allowSoftDelete bool) bool {
 	for _, tc := range calls {
 		if tc.Name != toolName {
 			continue
@@ -380,6 +448,9 @@ func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd 
 			tcPath = pathFromInput(tc, toolName)
 		}
 		if pathsMatch(tcPath, target, absPath, cwd) {
+			return true
+		}
+		if allowSoftDelete && toolName == "StrReplace" && isSoftDelete(tc) && pathsMatch(tcPath, target, absPath, cwd) {
 			return true
 		}
 	}
@@ -407,14 +478,55 @@ func pathFromInput(tc transcript.ToolCall, tool string) string {
 }
 
 func pathsMatch(toolPath, claimPath, absPath, cwd string) bool {
-	toolPath = strings.Trim(strings.TrimSpace(toolPath), `"'`+"`")
-	claimPath = strings.Trim(strings.TrimSpace(claimPath), `"'`+"`")
+	toolPath = NormalizePathToken(toolPath)
+	claimPath = NormalizePathToken(claimPath)
 	if toolPath == "" || claimPath == "" {
 		return false
 	}
 	if toolPath == claimPath || filepath.Base(toolPath) == filepath.Base(claimPath) {
 		return true
 	}
+	if basenameEquivalent(toolPath, claimPath) {
+		return true
+	}
 	toolAbs := resolveClaimPath(toolPath, cwd)
 	return toolAbs != "" && (toolAbs == absPath || strings.HasSuffix(toolAbs, claimPath) || strings.HasSuffix(absPath, toolPath))
+}
+
+func basenameEquivalent(a, b string) bool {
+	a = strings.TrimSuffix(strings.ToLower(filepath.Base(a)), filepath.Ext(a))
+	b = strings.TrimSuffix(strings.ToLower(filepath.Base(b)), filepath.Ext(b))
+	return a != "" && a == b
+}
+
+func isSoftDelete(tc transcript.ToolCall) bool {
+	if tc.Input == nil {
+		return false
+	}
+	raw, ok := tc.Input["new_string"]
+	if !ok {
+		return false
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return false
+	}
+	return strings.TrimSpace(s) == ""
+}
+
+func stripMarkdownCodeBlocks(body string) string {
+	lines := strings.Split(body, "\n")
+	var out []string
+	inFence := false
+	for _, line := range lines {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "```") {
+			inFence = !inFence
+			continue
+		}
+		if !inFence {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
 }

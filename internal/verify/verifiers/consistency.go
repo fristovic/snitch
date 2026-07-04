@@ -41,9 +41,9 @@ func (v *ConsistencyVerifier) Verify(c Claim, ctx VerifyContext) (Result, error)
 }
 
 var (
-	reWontModify = regexp.MustCompile(`(?i)\b(?:won't|will not|won't|not going to)\s+(?:modify|change|edit|touch|update)\s+(?:the\s+)?(?:file\s+)?[` + "`" + `'"']?([\w./-]+(?:\.\w+)?)[` + "`" + `'"']?`)
-	reAllNFiles  = regexp.MustCompile(`(?i)\ball\s+(\d+)\s+files?\b`)
-	reNoTests    = regexp.MustCompile(`(?i)\b(?:did not|didn't|won't|will not)\s+(?:touch|change|edit|modify)\s+(?:the\s+)?tests?\b`)
+	reWontModify = regexp.MustCompile(`(?i)\b(?:i\s+)?(?:won't|will not|not going to)\s+(?:modify|change|edit|touch|update)\s+(?:the\s+)?(?:file\s+)?[` + "`" + `'"']?([\w./-]+(?:\.\w+)?)[` + "`" + `'"']?`)
+	reAllNFiles  = regexp.MustCompile(`(?i)\b(?:all|touched all)\s+(\d+)\s+files?\b`)
+	reNoTests    = regexp.MustCompile(`(?i)\b(?:(?:did not|didn't|won't|will not)\s+(?:touch|change|edit|modify)\s+(?:the\s+)?tests?|left tests unchanged|avoided (?:editing )?test files|didn't modify tests)\b`)
 )
 
 // ExtractConsistencyClaims finds internal prose/tool contradictions in a turn.
@@ -55,7 +55,13 @@ func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim 
 		if len(m) < 2 {
 			continue
 		}
-		target := strings.Trim(m[1], `"'`+"`")
+		if isExcludedWontModifyContext(text, m[0]) {
+			continue
+		}
+		target := NormalizePathToken(m[1])
+		if !LooksLikePath(target) {
+			continue
+		}
 		if fileToolTargets(calls, target, cwd) {
 			claims = append(claims, Claim{
 				Type:        ClaimSelfContradiction,
@@ -71,12 +77,18 @@ func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim 
 		if len(m) < 2 {
 			continue
 		}
+		if isExcludedCountContext(text, m[0]) {
+			continue
+		}
 		n := 0
 		for _, c := range m[1] {
 			n = n*10 + int(c-'0')
 		}
 		actual := distinctFileToolCount(calls)
 		if n > 0 && actual > 0 && n != actual {
+			if actual < n && fileMutationCount(calls) >= n {
+				continue
+			}
 			claims = append(claims, Claim{
 				Type:        ClaimCountMismatch,
 				Source:      "consistency",
@@ -87,7 +99,7 @@ func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim 
 		}
 	}
 
-	if reNoTests.MatchString(text) && touchesTestFiles(calls, cwd) {
+	if reNoTests.MatchString(text) && !isExcludedNegationContext(text) && touchesTestFiles(calls, cwd) {
 		claims = append(claims, Claim{
 			Type:        ClaimNegationViolation,
 			Source:      "consistency",
@@ -97,6 +109,43 @@ func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim 
 	}
 
 	return claims
+}
+
+func isExcludedWontModifyContext(text, match string) bool {
+	idx := strings.Index(text, match)
+	if idx < 0 {
+		return false
+	}
+	before := strings.ToLower(text[max(0, idx-80):idx])
+	if strings.Contains(before, "if we ") || strings.Contains(before, "if you ") ||
+		strings.Contains(before, "user said") || strings.Contains(before, "example:") {
+		return true
+	}
+	after := strings.ToLower(text[idx+len(match):])
+	return strings.Contains(after, "in docs") || strings.Contains(after, "in documentation")
+}
+
+func isExcludedCountContext(text, match string) bool {
+	idx := strings.Index(strings.ToLower(text), strings.ToLower(match))
+	if idx < 0 {
+		return false
+	}
+	before := strings.ToLower(text[max(0, idx-40):idx])
+	return strings.Contains(before, "readme") || strings.Contains(before, "table")
+}
+
+func isExcludedNegationContext(text string) bool {
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "next pr") || strings.Contains(lower, "in the next") {
+		return true
+	}
+	if strings.Contains(lower, "unit tests") && strings.Contains(lower, "integration_test") {
+		return false
+	}
+	if strings.Contains(lower, "test documentation") || strings.Contains(lower, "the test documentation") {
+		return true
+	}
+	return false
 }
 
 func fileToolTargets(calls []transcript.ToolCall, target, cwd string) bool {
@@ -126,12 +175,22 @@ func distinctFileToolCount(calls []transcript.ToolCall) int {
 		if p == "" {
 			p = pathFromInput(tc, tc.Name)
 		}
-		p = strings.Trim(p, `"'`+"`")
+		p = NormalizePathToken(p)
 		if p != "" {
 			seen[filepath.Base(p)] = true
 		}
 	}
 	return len(seen)
+}
+
+func fileMutationCount(calls []transcript.ToolCall) int {
+	n := 0
+	for _, tc := range calls {
+		if tc.Name == "Write" || tc.Name == "StrReplace" || tc.Name == "Delete" {
+			n++
+		}
+	}
+	return n
 }
 
 func touchesTestFiles(calls []transcript.ToolCall, cwd string) bool {
@@ -150,4 +209,11 @@ func touchesTestFiles(calls []transcript.ToolCall, cwd string) bool {
 		_ = cwd
 	}
 	return false
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

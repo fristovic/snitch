@@ -150,10 +150,10 @@ func (s *Store) InsertClaims(claims []Claim) error {
 	for _, c := range claims {
 		ev, _ := json.Marshal(c.Evidence)
 		_, err := s.db.Exec(`
-			INSERT INTO claims (run_id, claim_type, source, target, claimed, actual, verified, severity, verifier, evidence)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO claims (run_id, claim_type, source, target, claimed, actual, verified, severity, verifier, evidence, confidence)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			c.RunID, c.ClaimType, c.Source, scrub.Scrub(c.Target), scrub.Scrub(c.Claimed),
-			scrub.Scrub(c.Actual), c.Verified, c.Severity, c.Verifier, string(ev))
+			scrub.Scrub(c.Actual), c.Verified, c.Severity, c.Verifier, string(ev), c.Confidence)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (s *Store) GetRunByID(id string) (*Run, error) {
 // GetClaimsByRun returns claims for a run.
 func (s *Store) GetClaimsByRun(runID string) ([]Claim, error) {
 	rows, err := s.db.Query(`
-		SELECT id, run_id, claim_type, source, target, claimed, actual, verified, severity, verifier, evidence, created_at
+		SELECT id, run_id, claim_type, source, target, claimed, actual, verified, severity, verifier, evidence, confidence, created_at
 		FROM claims WHERE run_id=? ORDER BY id`, runID)
 	if err != nil {
 		return nil, err
@@ -322,7 +322,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 	}
 	q := `
 		SELECT c.id, c.run_id, c.claim_type, c.source, c.target, c.claimed, c.actual,
-			c.verified, c.severity, c.verifier, c.evidence, c.created_at,
+			c.verified, c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
 			r.project_path, r.session_id, r.command, r.created_at, r.verdict
 		FROM claims c
 		JOIN runs r ON c.run_id = r.id
@@ -370,7 +370,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 		var lc LieClaim
 		var ev, created, runCreated, verdict string
 		if err := rows.Scan(&lc.ID, &lc.RunID, &lc.ClaimType, &lc.Source, &lc.Target, &lc.Claimed,
-			&lc.Actual, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &created,
+			&lc.Actual, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
 			&lc.ProjectPath, &lc.SessionID, &lc.RunCommand, &runCreated, &verdict); err != nil {
 			return nil, err
 		}
@@ -486,7 +486,7 @@ func scanClaims(rows *sql.Rows) ([]Claim, error) {
 		var ev string
 		var created string
 		if err := rows.Scan(&c.ID, &c.RunID, &c.ClaimType, &c.Source, &c.Target, &c.Claimed,
-			&c.Actual, &c.Verified, &c.Severity, &c.Verifier, &ev, &created); err != nil {
+			&c.Actual, &c.Verified, &c.Severity, &c.Verifier, &ev, &c.Confidence, &created); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(ev), &c.Evidence)

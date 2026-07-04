@@ -12,6 +12,7 @@ import (
 
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/record"
+	"github.com/fristovic/snitch/internal/transcript"
 )
 
 // Request is an IPC request.
@@ -220,7 +221,16 @@ func (s *Server) handleGetRun(req Request, writeResp func(Response)) {
 		return
 	}
 	claims, _ := s.deps.Store.GetClaimsByRun(run.ID)
-	result, _ := json.Marshal(map[string]any{"run": run, "claims": claims})
+	var toolCalls any
+	if raw, err := s.deps.Store.GetRunPayloadJSON(run.ID); err == nil && len(raw) > 0 {
+		var payload struct {
+			ToolCalls []transcript.ToolCall `json:"tool_calls"`
+		}
+		if json.Unmarshal(raw, &payload) == nil && len(payload.ToolCalls) > 0 {
+			toolCalls = payload.ToolCalls
+		}
+	}
+	result, _ := json.Marshal(map[string]any{"run": run, "claims": claims, "tool_calls": toolCalls})
 	writeResp(Response{ID: req.ID, Result: result})
 }
 

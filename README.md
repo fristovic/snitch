@@ -6,7 +6,7 @@
 
 <p align="center">
   <span style="display: inline-block; max-width: 720px; text-align: justify;">
-    Snitch is a deterministic <a href="https://cursor.com">Cursor</a> prose lie detector daemon for macOS. It watches agent transcripts, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls, tool output, filesystem, git, and same-turn consistency.
+    Snitch is a deterministic <a href="https://cursor.com">Cursor</a> prose lie detector daemon for macOS. It watches agent transcripts, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
   </span>
 </p>
 
@@ -158,12 +158,36 @@ The first notification triggers the macOS permission prompt.
 | `committed`          | "I committed"              | No new commit since turn start                     |
 | `pushed`             | "I pushed"                 | No `git push` shell call                           |
 | `file_created`       | "created foo.go"           | No matching `Write` + file missing                 |
+| `file_modified`      | "updated foo.go"           | No matching `Write`/`StrReplace` + file missing    |
+| `file_deleted`       | "deleted foo.go"           | No matching `Delete`/`StrReplace` + file still present |
 | `stub`               | "fully implemented"        | Written file is a placeholder (`panic("TODO")`, …) |
 | `no_action`          | action claims              | Zero tool calls in the turn                        |
 | `self_contradiction` | "won't modify X"           | Tool call edits X in the same turn                 |
 | `count_mismatch`     | "updated all 5 files"      | File tool-call count ≠ 5                           |
 | `negation_violation` | "did not touch tests"      | `*_test.*` file edited in the turn                 |
 
+
+
+## Session lookback (3 turns)
+
+Snitch persists each turn's full payload (tool calls, git HEAD, file manifest) in SQLite. When verifying recap/summary prose, it can credit evidence from up to **three prior turns** in the same session for:
+
+- `committed` / `pushed` — git shell or HEAD delta in prior turns
+- `test_pass` / `command_*` — shell evidence in prior turns
+- `file_created` / `file_modified` / `file_deleted` — file tools + manifests in prior turns
+- `stub` — placeholder bodies in files written this turn or prior turns
+
+**Same-turn only:** `no_action`, `self_contradiction`, `count_mismatch`, and `negation_violation` never use cross-turn lookback.
+
+Recap segments (`### Summary`, `## Summary`, horizontal rules) are tagged separately: inaccurate recap claims cap at WARN unless there is zero evidence across the current turn plus lookback.
+
+## Limitations
+
+- Deterministic regex extraction only (no LLM claim parsing)
+- Lookback is limited to the current Cursor session (3 turns), not cross-session history
+- Subagent tool calls are merged by **time window**, not `tool_use_id` mapping
+- Consistency checks remain same-turn only
+- File manifests hash paths touched by tool calls at turn end; out-of-band disk changes may be missed
 
 
 

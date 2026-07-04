@@ -29,6 +29,8 @@ type TurnCompleted struct {
 	ToolCalls      []ToolCall `json:"tool_calls"`
 	StartedAt      time.Time  `json:"started_at"`
 	FinishedAt     time.Time  `json:"finished_at"`
+	EndHEAD        string     `json:"end_head,omitempty"`
+	FileManifest   map[string]string `json:"file_manifest,omitempty"`
 }
 
 // Watcher watches Cursor agent transcript JSONL files.
@@ -304,6 +306,8 @@ func (w *Watcher) finishTurn(path string) {
 		ToolCalls:      AttachToolResults(buf.toolCalls, buf.toolResults),
 		StartedAt:      buf.startedAt,
 		FinishedAt:     finishedAt,
+		EndHEAD:        gitHEAD(projectPath),
+		FileManifest:   BuildFileManifest(projectPath, AttachToolResults(buf.toolCalls, buf.toolResults)),
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

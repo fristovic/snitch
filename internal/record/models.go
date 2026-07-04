@@ -33,6 +33,10 @@ type Run struct {
 	FalseClaims    int       `json:"false_claims"`
 	DeviceID       string    `json:"device_id"`
 	Trace          []string  `json:"trace,omitempty"`
+	StartHEAD      string    `json:"start_head,omitempty"`
+	EndHEAD        string    `json:"end_head,omitempty"`
+	FileManifest   map[string]string `json:"file_manifest,omitempty"`
+	PayloadJSON    string    `json:"-"` // raw stored payload; use GetRunPayload
 }
 
 // Claim is a verified prose or tool claim.
@@ -47,8 +51,9 @@ type Claim struct {
 	Verified  int       `json:"verified"`
 	Severity  int       `json:"severity"`
 	Verifier  string    `json:"verifier,omitempty"`
-	Evidence  []string  `json:"evidence,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Evidence    []string  `json:"evidence,omitempty"`
+	Confidence  int       `json:"confidence,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // LieClaim is a claim joined with run context for querying.

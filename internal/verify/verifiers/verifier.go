@@ -34,21 +34,48 @@ type Claim struct {
 	Target      string         `json:"target"`
 	Quote       string         `json:"quote"`
 	Description string         `json:"description"`
+	Segment     string         `json:"segment,omitempty"` // execution | recap
+	Confidence  int            `json:"confidence,omitempty"`
 	Input       map[string]any `json:"input,omitempty"`
+}
+
+// TurnEvidence is a prior turn's checkable evidence.
+type TurnEvidence struct {
+	RunID        string
+	ToolCalls    []transcript.ToolCall
+	StartHEAD    string
+	EndHEAD      string
+	StartedAt    time.Time
+	FinishedAt   time.Time
+	FileManifest map[string]string
 }
 
 // VerifyContext provides runtime context for verification.
 type VerifyContext struct {
-	Output         string
-	Cwd            string
-	ProjectPath    string
-	StartHEAD      string
-	TranscriptPath string
-	ObservedAt     time.Time
-	StartedAt      time.Time
-	FinishedAt     time.Time
-	ToolCalls      []transcript.ToolCall
-	AssistantText  string
+	Output             string
+	Cwd                string
+	ProjectPath        string
+	StartHEAD          string
+	EndHEAD            string
+	FileManifest       map[string]string
+	TranscriptPath     string
+	ObservedAt         time.Time
+	StartedAt          time.Time
+	FinishedAt         time.Time
+	ToolCalls          []transcript.ToolCall
+	EffectiveToolCalls []transcript.ToolCall
+	PriorTurns         []TurnEvidence
+	ExecutionText      string
+	RecapText          string
+	AssistantText      string
+}
+
+// AllToolCalls returns merged current-turn tool calls including subagent evidence.
+func AllToolCalls(ctx VerifyContext) []transcript.ToolCall {
+	if len(ctx.EffectiveToolCalls) > 0 {
+		return ctx.EffectiveToolCalls
+	}
+	return ctx.ToolCalls
 }
 
 // Result is a verification outcome.

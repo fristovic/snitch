@@ -42,7 +42,7 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		return v.verifyGitShell(cmd, ctx)
 	}
 
-	for _, tc := range ctx.ToolCalls {
+	for _, tc := range AllToolCalls(ctx) {
 		if tc.Name != "Shell" {
 			continue
 		}

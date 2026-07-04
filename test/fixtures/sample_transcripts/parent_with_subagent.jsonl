@@ -1,0 +1,3 @@
+{"role":"user","message":{"content":[{"type":"text","text":"run tests in subagent"}]}}
+{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"description":"run tests"}}]}}
+{"type":"turn_ended","status":"success"}
