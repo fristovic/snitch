@@ -36,18 +36,11 @@ func gitCommitWithoutFileTools(calls []transcript.ToolCall) bool {
 		case "Write", "StrReplace", "Delete":
 			return false
 		case "Shell":
-			cmd := strings.ToLower(shellCommandFromCall(tc))
+			cmd := strings.ToLower(verifiers.ShellCommand(tc))
 			if strings.Contains(cmd, "git commit") {
 				hasCommit = true
 			}
 		}
 	}
 	return hasCommit
-}
-
-func shellCommandFromCall(tc transcript.ToolCall) string {
-	if tc.Target != "" {
-		return tc.Target
-	}
-	return ""
 }

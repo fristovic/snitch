@@ -3,7 +3,6 @@ package verifiers
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -86,7 +85,7 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 		return r, nil
 
 	case ClaimNoAction:
-		if hasMutatingToolCalls(ctx.ToolCalls) {
+		if HasMutating(AllToolCalls(ctx)) {
 			r.Accurate = true
 			r.GroundTruth = "tool calls present"
 			return r, nil
@@ -113,7 +112,7 @@ func (v *ContradictionVerifier) verifyTestPass(ctx VerifyContext) (Result, error
 		return r, nil
 	}
 	for _, tc := range calls {
-		if tc.Name != "Shell" || !isTestCommand(shellCommand(tc)) {
+		if tc.Name != "Shell" || !isTestCommand(ShellCommand(tc)) {
 			continue
 		}
 		out, code, found := ShellOutputForCommand(tc, ctx)
@@ -195,7 +194,7 @@ func (v *ContradictionVerifier) verifyStub(ctx VerifyContext, cwd string) (Resul
 		}
 		path := tc.Target
 		if path == "" {
-			path = pathFromInput(tc, tc.Name)
+			path = PathFromInput(tc, tc.Name)
 		}
 		abs := resolveClaimPath(path, cwd)
 		if abs == "" {
@@ -287,102 +286,6 @@ func (v *ContradictionVerifier) verifyFileClaim(c Claim, ctx VerifyContext, cwd 
 	return r, nil
 }
 
-func hasTestShell(calls []transcript.ToolCall) bool {
-	for _, tc := range calls {
-		if tc.Name != "Shell" {
-			continue
-		}
-		cmd := shellCommand(tc)
-		if isTestCommand(cmd) {
-			return true
-		}
-	}
-	return false
-}
-
-func isTestCommand(cmd string) bool {
-	lower := strings.ToLower(strings.TrimSpace(cmd))
-	patterns := []string{
-		"go test", "pytest", "npm test", "yarn test", "pnpm test",
-		"jest", "cargo test", "make test", "phpunit", "bundle exec rspec",
-	}
-	for _, p := range patterns {
-		if strings.Contains(lower, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasGitCommitShell(calls []transcript.ToolCall) bool {
-	for _, tc := range calls {
-		if tc.Name != "Shell" {
-			continue
-		}
-		cmd := strings.ToLower(shellCommand(tc))
-		if strings.Contains(cmd, "git commit") {
-			return true
-		}
-	}
-	return false
-}
-
-func hasGitPushShell(calls []transcript.ToolCall) bool {
-	for _, tc := range calls {
-		if tc.Name != "Shell" {
-			continue
-		}
-		cmd := strings.ToLower(shellCommand(tc))
-		if strings.Contains(cmd, "git push") {
-			return true
-		}
-	}
-	return false
-}
-
-func hasShellCall(calls []transcript.ToolCall) bool {
-	for _, tc := range calls {
-		if tc.Name == "Shell" {
-			return true
-		}
-	}
-	return false
-}
-
-func hasNewCommit(cwd, startHEAD string) bool {
-	if cwd == "" || startHEAD == "" {
-		return false
-	}
-	current, err := exec.Command("git", "-C", cwd, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return false
-	}
-	cur := strings.TrimSpace(string(current))
-	if cur == "" || cur == startHEAD {
-		return false
-	}
-	out, err := exec.Command("git", "-C", cwd, "rev-list", "--count", startHEAD+"..HEAD").Output()
-	if err != nil {
-		return cur != startHEAD
-	}
-	n := strings.TrimSpace(string(out))
-	return n != "0" && n != ""
-}
-
-func shellCommand(tc transcript.ToolCall) string {
-	if tc.Target != "" {
-		return tc.Target
-	}
-	if tc.Input != nil {
-		if raw, ok := tc.Input["command"]; ok {
-			var cmd string
-			_ = json.Unmarshal(raw, &cmd)
-			return cmd
-		}
-	}
-	return ""
-}
-
 func matchedDiskPath(calls []transcript.ToolCall, toolNames []string, target, cwd string) string {
 	abs := resolveClaimPath(target, cwd)
 	for _, toolName := range toolNames {
@@ -392,7 +295,7 @@ func matchedDiskPath(calls []transcript.ToolCall, toolNames []string, target, cw
 			}
 			tcPath := tc.Target
 			if tcPath == "" {
-				tcPath = pathFromInput(tc, toolName)
+				tcPath = PathFromInput(tc, toolName)
 			}
 			if pathsMatch(tcPath, target, abs, cwd) {
 				if p := resolveClaimPath(tcPath, cwd); p != "" {
@@ -404,40 +307,6 @@ func matchedDiskPath(calls []transcript.ToolCall, toolNames []string, target, cw
 	return ""
 }
 
-func hasMutatingToolCalls(calls []transcript.ToolCall) bool {
-	readOnly := map[string]bool{
-		"Read": true, "Glob": true, "Grep": true, "SemanticSearch": true,
-	}
-	for _, tc := range calls {
-		if !readOnly[tc.Name] {
-			return true
-		}
-	}
-	return false
-}
-
-func hasGitActivityShell(calls []transcript.ToolCall) bool {
-	for _, tc := range calls {
-		if tc.Name != "Shell" {
-			continue
-		}
-		cmd := strings.ToLower(shellCommand(tc))
-		if strings.Contains(cmd, "git commit") {
-			return true
-		}
-	}
-	return false
-}
-
-func hasAnyToolForPath(calls []transcript.ToolCall, toolNames []string, target, absPath, cwd string, allowSoftDelete bool) bool {
-	for _, toolName := range toolNames {
-		if hasToolForPath(calls, toolName, target, absPath, cwd, allowSoftDelete) {
-			return true
-		}
-	}
-	return false
-}
-
 func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd string, allowSoftDelete bool) bool {
 	for _, tc := range calls {
 		if tc.Name != toolName {
@@ -445,7 +314,7 @@ func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd 
 		}
 		tcPath := tc.Target
 		if tcPath == "" {
-			tcPath = pathFromInput(tc, toolName)
+			tcPath = PathFromInput(tc, toolName)
 		}
 		if pathsMatch(tcPath, target, absPath, cwd) {
 			return true
@@ -455,26 +324,6 @@ func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd 
 		}
 	}
 	return false
-}
-
-func pathFromInput(tc transcript.ToolCall, tool string) string {
-	if tc.Input == nil {
-		return ""
-	}
-	keys := []string{"path", "file_path", "target_file"}
-	if tool == "Delete" {
-		keys = append(keys, "path")
-	}
-	for _, k := range keys {
-		if raw, ok := tc.Input[k]; ok {
-			var p string
-			_ = json.Unmarshal(raw, &p)
-			if p != "" {
-				return p
-			}
-		}
-	}
-	return ""
 }
 
 func pathsMatch(toolPath, claimPath, absPath, cwd string) bool {

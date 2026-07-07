@@ -1,7 +1,6 @@
 package verify
 
 import (
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -72,19 +71,19 @@ func extractProseFromSegment(text, segment string) []verifiers.Claim {
 	}
 
 	for _, m := range reTestPass.FindAllStringIndex(text, -1) {
-		if isFigurativeTestPhrase(text, m[0], m[1]) {
+		if shouldSuppressClaim(verifiers.ClaimTestPass, text, m[0], m[1]) {
 			continue
 		}
 		add(verifiers.ClaimTestPass, text[m[0]:m[1]], "")
 	}
 	for _, m := range reCommitted.FindAllStringIndex(text, -1) {
-		if isHistoricalOrFigurativeCommit(text, m[0], m[1]) {
+		if shouldSuppressClaim(verifiers.ClaimCommitted, text, m[0], m[1]) {
 			continue
 		}
 		add(verifiers.ClaimCommitted, text[m[0]:m[1]], "")
 	}
 	for _, m := range rePushed.FindAllStringIndex(text, -1) {
-		if isFigurativePush(text, m[0], m[1]) {
+		if shouldSuppressClaim(verifiers.ClaimPushed, text, m[0], m[1]) {
 			continue
 		}
 		add(verifiers.ClaimPushed, text[m[0]:m[1]], "")
@@ -108,19 +107,19 @@ func extractProseFromSegment(text, segment string) []verifiers.Claim {
 		}
 	}
 	for _, m := range reCommandRan.FindAllStringIndex(text, -1) {
-		if isFigurativeCommandRan(text, m[0], m[1]) {
+		if shouldSuppressClaim(verifiers.ClaimCommandRan, text, m[0], m[1]) {
 			continue
 		}
 		add(verifiers.ClaimCommandRan, text[m[0]:m[1]], "")
 	}
 	for _, m := range reCommandSucceeded.FindAllStringIndex(text, -1) {
-		if isConditionalPhrase(text, m[0]) {
+		if shouldSuppressClaim(verifiers.ClaimCommandSucceeded, text, m[0], m[1]) {
 			continue
 		}
 		add(verifiers.ClaimCommandSucceeded, text[m[0]:m[1]], "")
 	}
 	for _, m := range reComplete.FindAllStringIndex(text, -1) {
-		if isColloquialDone(text, m[0], m[1]) {
+		if shouldSuppressClaim(verifiers.ClaimStub, text, m[0], m[1]) {
 			continue
 		}
 		add(verifiers.ClaimStub, text[m[0]:m[1]], "")
@@ -152,16 +151,6 @@ func scoreConfidence(t verifiers.ClaimType, target, quote, segment string) int {
 	if strings.Contains(quote, "`") && target != "" {
 		return 3
 	}
-	if isFileClaim(t) && verifiers.LooksLikePath(target) {
-		if strings.Contains(target, "/") || strings.Contains(target, ".") {
-			return 2
-		}
-	}
-	known := map[string]bool{"readme": true, "makefile": true, "dockerfile": true}
-	base := strings.ToLower(strings.TrimSuffix(strings.ToLower(target), filepath.Ext(target)))
-	if known[base] || known[strings.ToLower(filepath.Base(target))] {
-		return 2
-	}
 	return 2
 }
 
@@ -182,85 +171,6 @@ func addBacktickFileClaims(text string, re *regexp.Regexp, t verifiers.ClaimType
 	}
 }
 
-func stripSummarySection(text string) string {
-	exec, _ := segmentProse(text)
-	return exec
-}
-
-func isFigurativeTestPhrase(text string, start, end int) bool {
-	snippet := strings.ToLower(text[start:end])
-	if strings.Contains(snippet, "your patience") {
-		return true
-	}
-	after := strings.ToLower(strings.TrimSpace(text[end:]))
-	if strings.HasPrefix(after, "in the spec") || strings.HasPrefix(after, "in the dashboard") {
-		return true
-	}
-	window := strings.ToLower(text[max(0, start-20):min(len(text), end+30)])
-	return strings.Contains(window, "last week") || strings.Contains(window, "in ci")
-}
-
-func isHistoricalOrFigurativeCommit(text string, start, end int) bool {
-	window := strings.ToLower(text[max(0, start-20):min(len(text), end+40)])
-	if strings.Contains(window, "commit to ") {
-		return true
-	}
-	for _, phrase := range []string{
-		"earlier", "yesterday", "you committed", "pre-commit", "amend committed",
-		"changelog says", "changelog notes", "do not amend", "hook committed",
-	} {
-		if strings.Contains(window, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
-func isFigurativePush(text string, start, end int) bool {
-	window := strings.ToLower(text[max(0, start-10):min(len(text), end+30)])
-	for _, phrase := range []string{
-		"pushed for", "pushed forward", "pushed to the docs", "pushed to clarify",
-	} {
-		if strings.Contains(window, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
-func isFigurativeCommandRan(text string, start, end int) bool {
-	after := strings.ToLower(strings.TrimSpace(text[end:]))
-	return strings.HasPrefix(after, "in my head") || strings.HasPrefix(after, "into ") ||
-		strings.HasPrefix(after, "output ")
-}
-
-func isConditionalPhrase(text string, start int) bool {
-	before := strings.ToLower(text[max(0, start-20):start])
-	return strings.Contains(before, "if ") || strings.Contains(before, "if the ")
-}
-
-func isColloquialDone(text string, start, end int) bool {
-	snippet := strings.ToLower(strings.TrimSpace(text[start:end]))
-	if snippet == "done" || snippet == "done." {
-		return true
-	}
-	if strings.HasPrefix(snippet, "we're done") || strings.HasPrefix(snippet, "we are done") {
-		return true
-	}
-	if strings.Contains(snippet, "done building") || strings.Contains(snippet, "done with") {
-		return true
-	}
-	if strings.Contains(snippet, "nothing left to do on your end") {
-		return true
-	}
-	return false
-}
-
-// HasActionProse reports whether prose contains action-oriented claims.
-func HasActionProse(claims []verifiers.Claim) bool {
-	return HasLocalActionProse(claims)
-}
-
 // HasLocalActionProse reports prose claims that imply the agent mutated state this turn.
 func HasLocalActionProse(claims []verifiers.Claim) bool {
 	for _, c := range claims {
@@ -275,18 +185,4 @@ func HasLocalActionProse(claims []verifiers.Claim) bool {
 		}
 	}
 	return false
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

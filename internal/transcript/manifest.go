@@ -19,7 +19,7 @@ func BuildFileManifest(projectPath string, calls []ToolCall) map[string]string {
 	for _, tc := range calls {
 		p := tc.Target
 		if p == "" {
-			p = pathFromToolInput(tc)
+			p = PathFromToolInput(tc)
 		}
 		p = strings.Trim(p, `"'`+"`")
 		if p == "" || seen[p] {
@@ -43,7 +43,8 @@ func BuildFileManifest(projectPath string, calls []ToolCall) map[string]string {
 	return out
 }
 
-func pathFromToolInput(tc ToolCall) string {
+// PathFromToolInput extracts a file path from tool call input fields.
+func PathFromToolInput(tc ToolCall) string {
 	if tc.Input == nil {
 		return ""
 	}

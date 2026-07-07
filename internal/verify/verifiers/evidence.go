@@ -9,18 +9,18 @@ import (
 
 // HasCommitEvidence reports git commit evidence in current or prior turns.
 func HasCommitEvidence(ctx VerifyContext) bool {
-	if hasGitCommitShell(AllToolCalls(ctx)) {
+	if HasGitCommitShell(AllToolCalls(ctx)) {
 		return true
 	}
 	cwd := ctx.ProjectPath
 	if cwd == "" {
 		cwd = ctx.Cwd
 	}
-	if hasNewCommit(cwd, ctx.StartHEAD) && hasGitActivityShell(AllToolCalls(ctx)) {
+	if hasNewCommit(cwd, ctx.StartHEAD) && HasGitCommitShell(AllToolCalls(ctx)) {
 		return true
 	}
 	for _, pt := range ctx.PriorTurns {
-		if hasGitCommitShell(pt.ToolCalls) {
+		if HasGitCommitShell(pt.ToolCalls) {
 			return true
 		}
 		if hasNewCommit(cwd, pt.StartHEAD) && pt.EndHEAD != "" && pt.EndHEAD != pt.StartHEAD {
@@ -32,11 +32,11 @@ func HasCommitEvidence(ctx VerifyContext) bool {
 
 // HasPushEvidence reports git push evidence in current or prior turns.
 func HasPushEvidence(ctx VerifyContext) bool {
-	if hasGitPushShell(AllToolCalls(ctx)) {
+	if HasGitPushShell(AllToolCalls(ctx)) {
 		return true
 	}
 	for _, pt := range ctx.PriorTurns {
-		if hasGitPushShell(pt.ToolCalls) {
+		if HasGitPushShell(pt.ToolCalls) {
 			return true
 		}
 	}
@@ -45,11 +45,11 @@ func HasPushEvidence(ctx VerifyContext) bool {
 
 // HasTestShellEvidence reports test shell commands in current or prior turns.
 func HasTestShellEvidence(ctx VerifyContext) bool {
-	if hasTestShell(AllToolCalls(ctx)) {
+	if HasTestShell(AllToolCalls(ctx)) {
 		return true
 	}
 	for _, pt := range ctx.PriorTurns {
-		if hasTestShell(pt.ToolCalls) {
+		if HasTestShell(pt.ToolCalls) {
 			return true
 		}
 	}
@@ -58,11 +58,11 @@ func HasTestShellEvidence(ctx VerifyContext) bool {
 
 // HasShellEvidence reports any shell tool call in current or prior turns.
 func HasShellEvidence(ctx VerifyContext) bool {
-	if hasShellCall(AllToolCalls(ctx)) {
+	if HasShellCall(AllToolCalls(ctx)) {
 		return true
 	}
 	for _, pt := range ctx.PriorTurns {
-		if hasShellCall(pt.ToolCalls) {
+		if HasShellCall(pt.ToolCalls) {
 			return true
 		}
 	}
@@ -87,33 +87,6 @@ func HasFileToolForPath(ctx VerifyContext, target string) bool {
 	return false
 }
 
-// HasWrittenStubInTurn reports stub bodies in files written this turn or prior turns.
-func HasWrittenStubInTurn(ctx VerifyContext) bool {
-	cwd := ctx.ProjectPath
-	if cwd == "" {
-		cwd = ctx.Cwd
-	}
-	for _, tc := range AllToolCalls(ctx) {
-		if tc.Name != "Write" && tc.Name != "StrReplace" {
-			continue
-		}
-		if stubFromTool(tc, cwd) {
-			return true
-		}
-	}
-	for _, pt := range ctx.PriorTurns {
-		for _, tc := range pt.ToolCalls {
-			if tc.Name != "Write" && tc.Name != "StrReplace" {
-				continue
-			}
-			if stubFromTool(tc, cwd) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func hasAnyFileToolForPath(calls []transcript.ToolCall, target, absPath, cwd string) bool {
 	tools := []string{"Write", "StrReplace", "Delete"}
 	for _, tool := range tools {
@@ -122,20 +95,6 @@ func hasAnyFileToolForPath(calls []transcript.ToolCall, target, absPath, cwd str
 		}
 	}
 	return false
-}
-
-func stubFromTool(tc transcript.ToolCall, cwd string) bool {
-	body := writeBodyFromTool(tc)
-	if body == "" {
-		return false
-	}
-	body = stripMarkdownCodeBlocks(body)
-	path := tc.Target
-	if path == "" {
-		path = pathFromInput(tc, tc.Name)
-	}
-	abs := resolveClaimPath(path, cwd)
-	return IsStubBody(body, abs)
 }
 
 // SessionHasZeroEvidence reports whether no checkable evidence exists across lookback.
@@ -156,14 +115,6 @@ func SessionHasZeroEvidence(ctx VerifyContext, claimType ClaimType) bool {
 	}
 }
 
-// PriorEndHEAD returns the most recent prior turn end HEAD.
-func PriorEndHEAD(ctx VerifyContext) string {
-	if len(ctx.PriorTurns) == 0 {
-		return ""
-	}
-	return ctx.PriorTurns[len(ctx.PriorTurns)-1].EndHEAD
-}
-
 // GitHEADAt returns current HEAD for project.
 func GitHEADAt(cwd string) string {
 	if cwd == "" {
@@ -174,4 +125,24 @@ func GitHEADAt(cwd string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func hasNewCommit(cwd, startHEAD string) bool {
+	if cwd == "" || startHEAD == "" {
+		return false
+	}
+	current, err := exec.Command("git", "-C", cwd, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return false
+	}
+	cur := strings.TrimSpace(string(current))
+	if cur == "" || cur == startHEAD {
+		return false
+	}
+	out, err := exec.Command("git", "-C", cwd, "rev-list", "--count", startHEAD+"..HEAD").Output()
+	if err != nil {
+		return cur != startHEAD
+	}
+	n := strings.TrimSpace(string(out))
+	return n != "0" && n != ""
 }

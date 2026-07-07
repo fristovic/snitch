@@ -33,8 +33,14 @@ func LoadSubagentToolCalls(parentPath string, windowStart, windowEnd time.Time) 
 		if err != nil || info.Size() == 0 {
 			continue
 		}
+		modTime := info.ModTime()
+		if !windowStart.IsZero() && !windowEnd.IsZero() {
+			if modTime.Before(windowStart) || modTime.After(windowEnd) {
+				continue
+			}
+		}
 		path := filepath.Join(subDir, e.Name())
-		calls, err := toolCallsInWindow(path, windowStart, windowEnd)
+		calls, err := toolCallsInWindow(path, windowStart, windowEnd, modTime)
 		if err != nil {
 			continue
 		}
@@ -50,7 +56,7 @@ func LoadSubagentToolCalls(parentPath string, windowStart, windowEnd time.Time) 
 	return merged, nil
 }
 
-func toolCallsInWindow(path string, windowStart, windowEnd time.Time) ([]ToolCall, error) {
+func toolCallsInWindow(path string, windowStart, windowEnd, fileModTime time.Time) ([]ToolCall, error) {
 	lines, _, err := ParseLines(path, 0)
 	if err != nil {
 		return nil, err
@@ -63,8 +69,12 @@ func toolCallsInWindow(path string, windowStart, windowEnd time.Time) ([]ToolCal
 	var out []ToolCall
 	for _, line := range lines {
 		if line.TurnEnded {
-			finishedAt := time.Now()
-			if !buf.startedAt.IsZero() && inSubagentWindow(buf.startedAt, finishedAt, windowStart, windowEnd) {
+			turnEnd := fileModTime
+			turnStart := fileModTime
+			if !buf.startedAt.IsZero() {
+				turnStart = buf.startedAt
+			}
+			if inSubagentWindow(turnStart, turnEnd, windowStart, windowEnd) {
 				out = append(out, AttachToolResults(buf.toolCalls, buf.toolResults)...)
 			}
 			buf.toolCalls = nil
@@ -73,7 +83,7 @@ func toolCallsInWindow(path string, windowStart, windowEnd time.Time) ([]ToolCal
 			continue
 		}
 		if buf.startedAt.IsZero() {
-			buf.startedAt = time.Now()
+			buf.startedAt = fileModTime
 		}
 		buf.toolCalls = append(buf.toolCalls, line.ToolCalls...)
 		buf.toolResults = append(buf.toolResults, line.ToolResults...)

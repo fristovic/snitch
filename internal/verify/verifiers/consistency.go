@@ -47,9 +47,8 @@ var (
 )
 
 // ExtractConsistencyClaims finds internal prose/tool contradictions in a turn.
-func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim {
+func ExtractConsistencyClaims(text string, calls []transcript.ToolCall, projectPath string) []Claim {
 	var claims []Claim
-	cwd := ""
 
 	for _, m := range reWontModify.FindAllStringSubmatch(text, -1) {
 		if len(m) < 2 {
@@ -62,7 +61,7 @@ func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim 
 		if !LooksLikePath(target) {
 			continue
 		}
-		if fileToolTargets(calls, target, cwd) {
+		if fileToolTargets(calls, target, projectPath) {
 			claims = append(claims, Claim{
 				Type:        ClaimSelfContradiction,
 				Source:      "consistency",
@@ -99,7 +98,7 @@ func ExtractConsistencyClaims(text string, calls []transcript.ToolCall) []Claim 
 		}
 	}
 
-	if reNoTests.MatchString(text) && !isExcludedNegationContext(text) && touchesTestFiles(calls, cwd) {
+	if reNoTests.MatchString(text) && !isExcludedNegationContext(text) && touchesTestFiles(calls) {
 		claims = append(claims, Claim{
 			Type:        ClaimNegationViolation,
 			Source:      "consistency",
@@ -156,7 +155,7 @@ func fileToolTargets(calls []transcript.ToolCall, target, cwd string) bool {
 		}
 		p := tc.Target
 		if p == "" {
-			p = pathFromInput(tc, tc.Name)
+			p = PathFromInput(tc, tc.Name)
 		}
 		if pathsMatch(p, target, abs, cwd) {
 			return true
@@ -173,7 +172,7 @@ func distinctFileToolCount(calls []transcript.ToolCall) int {
 		}
 		p := tc.Target
 		if p == "" {
-			p = pathFromInput(tc, tc.Name)
+			p = PathFromInput(tc, tc.Name)
 		}
 		p = NormalizePathToken(p)
 		if p != "" {
@@ -193,20 +192,19 @@ func fileMutationCount(calls []transcript.ToolCall) int {
 	return n
 }
 
-func touchesTestFiles(calls []transcript.ToolCall, cwd string) bool {
+func touchesTestFiles(calls []transcript.ToolCall) bool {
 	for _, tc := range calls {
 		if tc.Name != "Write" && tc.Name != "StrReplace" {
 			continue
 		}
 		p := tc.Target
 		if p == "" {
-			p = pathFromInput(tc, tc.Name)
+			p = PathFromInput(tc, tc.Name)
 		}
 		base := strings.ToLower(filepath.Base(p))
 		if strings.Contains(base, "_test.") || strings.HasSuffix(base, "_test.go") {
 			return true
 		}
-		_ = cwd
 	}
 	return false
 }

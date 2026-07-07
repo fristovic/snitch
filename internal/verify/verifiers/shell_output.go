@@ -19,7 +19,7 @@ func ShellOutputForCommand(tc transcript.ToolCall, ctx VerifyContext) (output st
 		}
 		return tc.Result, code, true
 	}
-	cmd := shellCommand(tc)
+	cmd := ShellCommand(tc)
 	if cmd == "" {
 		return "", 0, false
 	}
@@ -279,10 +279,7 @@ func IsStubBody(body, path string) bool {
 			return true
 		}
 	}
-	if isEmptyImplementation(lower) {
-		return true
-	}
-	return false
+	return isEmptyImplementation(lower)
 }
 
 func isDocPath(path string) bool {

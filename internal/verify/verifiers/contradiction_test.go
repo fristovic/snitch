@@ -71,6 +71,7 @@ func TestConsistencySelfContradiction(t *testing.T) {
 	claims := verifiers.ExtractConsistencyClaims(
 		"I won't modify schema.sql in this turn.",
 		[]transcript.ToolCall{{Name: "Write", Target: "schema.sql"}},
+		"",
 	)
 	if len(claims) != 1 || claims[0].Type != verifiers.ClaimSelfContradiction {
 		t.Fatalf("claims: %+v", claims)

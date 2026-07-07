@@ -16,15 +16,21 @@ func TestLoadSubagentToolCalls(t *testing.T) {
 	if err := os.MkdirAll(subDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	subPath := filepath.Join(subDir, "run-tests.jsonl")
 	subContent := `{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell","input":{"command":"go test ./..."}}]}}
 {"type":"turn_ended","status":"success"}
 `
-	if err := os.WriteFile(filepath.Join(subDir, "run-tests.jsonl"), []byte(subContent), 0o644); err != nil {
+	if err := os.WriteFile(subPath, []byte(subContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	start := time.Now().Add(-time.Minute)
-	end := time.Now().Add(time.Minute)
+	modTime := time.Now()
+	if err := os.Chtimes(subPath, modTime, modTime); err != nil {
+		t.Fatal(err)
+	}
+
+	start := modTime.Add(-time.Minute)
+	end := modTime.Add(time.Minute)
 	calls, err := transcript.LoadSubagentToolCalls(parent, start, end)
 	if err != nil {
 		t.Fatal(err)

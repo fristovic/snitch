@@ -70,12 +70,53 @@ func RunCase(sc StressCase, dataDir, projectDir string) (CaseResult, error) {
 		return CaseResult{}, err
 	}
 
+	now := time.Now()
+	return runOneTurn(store, deviceID, sc, projectDir, now.Add(-time.Minute), now)
+}
+
+// RunSession executes turns in order sharing a session for lookback tests.
+func RunSession(cases []StressCase, dataDir, projectDir, sessionID string) ([]CaseResult, error) {
+	store, err := record.Open(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	deviceID, err := store.EnsureDeviceID()
+	if err != nil {
+		return nil, err
+	}
+
+	var results []CaseResult
+	base := time.Now().Add(-time.Hour)
+	for i, sc := range cases {
+		for rel, body := range sc.ProjectFiles {
+			abs := filepath.Join(projectDir, rel)
+			if err := writeFile(abs, body); err != nil {
+				return nil, err
+			}
+		}
+		if err := applyToolCalls(projectDir, sc.ToolCalls); err != nil {
+			return nil, err
+		}
+
+		started := base.Add(time.Duration(i) * time.Minute)
+		finished := started.Add(30 * time.Second)
+		res, err := runOneTurn(store, deviceID, sc, projectDir, started, finished)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, res)
+	}
+	return results, nil
+}
+
+func runOneTurn(store *record.Store, deviceID string, sc StressCase, projectDir string, started, finished time.Time) (CaseResult, error) {
 	runID := "stress-" + sc.Name
 	sessionID := sc.SessionID
 	if sessionID == "" {
 		sessionID = "stress-session"
 	}
-	now := time.Now()
 	payload := capture.RunPayload{
 		RunID:         runID,
 		SessionID:     sessionID,
@@ -88,8 +129,8 @@ func RunCase(sc StressCase, dataDir, projectDir string) (CaseResult, error) {
 		StartHEAD:     sc.StartHEAD,
 		EndHEAD:       sc.EndHEAD,
 		FileManifest:  transcript.BuildFileManifest(projectDir, sc.ToolCalls),
-		StartedAt:     now.Add(-time.Minute),
-		FinishedAt:    now,
+		StartedAt:     started,
+		FinishedAt:    finished,
 	}
 
 	bus := newTestBus()
@@ -126,89 +167,6 @@ func RunCase(sc StressCase, dataDir, projectDir string) (CaseResult, error) {
 		}
 	}
 	return res, nil
-}
-
-// RunSession executes turns in order sharing a session for lookback tests.
-func RunSession(cases []StressCase, dataDir, projectDir, sessionID string) ([]CaseResult, error) {
-	store, err := record.Open(dataDir)
-	if err != nil {
-		return nil, err
-	}
-	defer store.Close()
-
-	deviceID, err := store.EnsureDeviceID()
-	if err != nil {
-		return nil, err
-	}
-
-	var results []CaseResult
-	base := time.Now().Add(-time.Hour)
-	for i, sc := range cases {
-		for rel, body := range sc.ProjectFiles {
-			abs := filepath.Join(projectDir, rel)
-			if err := writeFile(abs, body); err != nil {
-				return nil, err
-			}
-		}
-		if err := applyToolCalls(projectDir, sc.ToolCalls); err != nil {
-			return nil, err
-		}
-
-		runID := "stress-" + sc.Name
-		started := base.Add(time.Duration(i) * time.Minute)
-		finished := started.Add(30 * time.Second)
-		payload := capture.RunPayload{
-			RunID:         runID,
-			SessionID:     sessionID,
-			ProjectPath:   projectDir,
-			AssistantText: sc.AssistantText,
-			Output:        sc.AssistantText,
-			ToolCalls:     sc.ToolCalls,
-			ToolCallCount: len(sc.ToolCalls),
-			Harness:       "cursor",
-			StartHEAD:     sc.StartHEAD,
-			EndHEAD:       sc.EndHEAD,
-			FileManifest:  transcript.BuildFileManifest(projectDir, sc.ToolCalls),
-			StartedAt:     started,
-			FinishedAt:    finished,
-		}
-
-		bus := newTestBus()
-		engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
-		engine.VerifyPayload(payload)
-
-		run, err := store.GetRunByID(runID)
-		if err != nil {
-			return nil, err
-		}
-		claims, err := store.GetClaimsByRun(runID)
-		if err != nil {
-			return nil, err
-		}
-
-		res := CaseResult{Claims: claims}
-		if run != nil {
-			res.Verdict = run.Verdict
-		}
-		claimType := sc.ExpectClaimType
-		if claimType == "" {
-			claimType = sc.LieType
-		}
-		for j := range claims {
-			c := &claims[j]
-			if c.ClaimType != claimType {
-				continue
-			}
-			if c.Verified < 0 && c.Severity >= 2 {
-				res.MatchedLie = true
-				cp := *c
-				res.LieClaim = &cp
-				break
-			}
-		}
-		results = append(results, res)
-	}
-	return results, nil
 }
 
 // AllCases returns every stress case across families.

@@ -10,7 +10,6 @@ import (
 	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/fristovic/snitch/internal/severity"
-	"github.com/fristovic/snitch/internal/transcript"
 	"github.com/fristovic/snitch/internal/verify/verifiers"
 )
 
@@ -126,14 +125,7 @@ func (e *Engine) process(ev event.Event) {
 	vctx, err := BuildVerifyContext(e.store, payload)
 	if err != nil {
 		slog.Warn("build verify context failed", "err", err)
-		vctx = verifiers.VerifyContext{
-			Output: payload.Output, Cwd: payload.ProjectPath, ProjectPath: payload.ProjectPath,
-			StartHEAD: payload.StartHEAD, EndHEAD: payload.EndHEAD, FileManifest: payload.FileManifest,
-			TranscriptPath: payload.TranscriptPath, ObservedAt: payload.FinishedAt,
-			StartedAt: payload.StartedAt, FinishedAt: payload.FinishedAt,
-			ToolCalls: payload.ToolCalls, EffectiveToolCalls: payload.ToolCalls,
-			AssistantText: payload.AssistantText,
-		}
+		vctx = baseVerifyContext(payload)
 	}
 
 	claims := e.buildClaims(payload, vctx)
@@ -163,8 +155,7 @@ func (e *Engine) process(ev event.Event) {
 		if best.Verifier == "" {
 			continue
 		}
-		best.Severity = AdjustSeverity(best.Severity, claim, best.Accurate)
-		best.Severity = RecapEscalateSeverity(best.Severity, claim, best.Accurate, vctx)
+		best.Severity = ApplyClaimPolicy(best.Severity, claim, best.Accurate, vctx)
 		if best.Accurate {
 			verified++
 		} else if best.Severity >= severity.Level2 {
@@ -224,10 +215,11 @@ func (e *Engine) process(ev event.Event) {
 }
 
 func (e *Engine) buildClaims(payload capture.RunPayload, vctx verifiers.VerifyContext) []verifiers.Claim {
+	calls := verifiers.AllToolCalls(vctx)
 	claims := ExtractProseClaims(payload.AssistantText)
-	claims = filterFileClaimsWithGitCommitOnly(claims, verifiers.AllToolCalls(vctx), vctx)
-	claims = append(claims, verifiers.ExtractConsistencyClaims(payload.AssistantText, payload.ToolCalls)...)
-	if !hasMutatingToolCalls(payload.ToolCalls) && (HasLocalActionProse(claims) || reGenericActionProse.MatchString(payload.AssistantText)) {
+	claims = filterFileClaimsWithGitCommitOnly(claims, calls, vctx)
+	claims = append(claims, verifiers.ExtractConsistencyClaims(payload.AssistantText, calls, payload.ProjectPath)...)
+	if !verifiers.HasMutating(calls) && (HasLocalActionProse(claims) || reGenericActionProse.MatchString(payload.AssistantText)) {
 		claims = append(claims, verifiers.Claim{
 			Type:        verifiers.ClaimNoAction,
 			Source:      "prose",
@@ -240,18 +232,6 @@ func (e *Engine) buildClaims(payload capture.RunPayload, vctx verifiers.VerifyCo
 		}
 	}
 	return claims
-}
-
-func hasMutatingToolCalls(calls []transcript.ToolCall) bool {
-	readOnly := map[string]bool{
-		"Read": true, "Glob": true, "Grep": true, "SemanticSearch": true,
-	}
-	for _, tc := range calls {
-		if !readOnly[tc.Name] {
-			return true
-		}
-	}
-	return false
 }
 
 func (e *Engine) emitVerified(p event.RunVerifiedPayload) {

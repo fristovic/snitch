@@ -46,7 +46,7 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		if tc.Name != "Shell" {
 			continue
 		}
-		if shellCommand(tc) != cmd && tc.Target != cmd {
+		if ShellCommand(tc) != cmd && tc.Target != cmd {
 			continue
 		}
 		out, code, found := ShellOutputForCommand(tc, ctx)
