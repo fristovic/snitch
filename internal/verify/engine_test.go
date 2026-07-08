@@ -23,7 +23,7 @@ func TestEngineVerifiesToolCalls(t *testing.T) {
 	defer bus.Close()
 
 	done := make(chan struct{}, 1)
-	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	engine.OnVerified(func(event.RunVerifiedPayload) { done <- struct{}{} })
 	engine.Start()
 
@@ -70,7 +70,7 @@ func TestEngineCatchesTestPassLie(t *testing.T) {
 	defer bus.Close()
 
 	done := make(chan struct{}, 1)
-	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	engine.OnVerified(func(p event.RunVerifiedPayload) {
 		if p.Verdict == record.VerdictFail {
 			done <- struct{}{}

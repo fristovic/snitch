@@ -3,7 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/spf13/cobra"
@@ -38,8 +40,25 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("projects watched: %d\n", st.ProjectsWatched)
 		fmt.Printf("sessions seen: %d\n", st.SessionsSeen)
 
+		// Show which harnesses are enabled.
+		cfgData, cfgErr := client.Call("get_config", nil)
+		if cfgErr == nil {
+			var cfg config.Config
+			if json.Unmarshal(cfgData, &cfg) == nil {
+				var enabled []string
+				for _, name := range config.HarnessNames() {
+					if pc, ok := cfg.Platforms.ForHarness(name); ok && pc.Enabled {
+						enabled = append(enabled, name)
+					}
+				}
+				if len(enabled) > 0 {
+					fmt.Printf("harnesses: %s\n", strings.Join(enabled, ", "))
+				}
+			}
+		}
+
 		if st.TotalRuns == 0 {
-			fmt.Println("\nSnitching — trigger a Cursor agent turn to see results")
+			fmt.Println("\nSnitching — trigger an agent turn to see results")
 		}
 
 		if !statusDetailed {
@@ -47,6 +66,12 @@ var statusCmd = &cobra.Command{
 		}
 
 		fmt.Printf("snitched runs: %d\n", st.SnitchedRuns)
+		if len(st.RunsByHarness) > 0 {
+			fmt.Println("runs by harness:")
+			for h, n := range st.RunsByHarness {
+				fmt.Printf("  %s: %d\n", h, n)
+			}
+		}
 		if st.TopLieType != "" {
 			fmt.Printf("top lie type: %s\n", st.TopLieType)
 		}
@@ -75,4 +100,3 @@ var statusCmd = &cobra.Command{
 func init() {
 	statusCmd.Flags().BoolVar(&statusDetailed, "detailed", false, "Show lie statistics and recent failures")
 }
-

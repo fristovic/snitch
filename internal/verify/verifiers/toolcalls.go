@@ -26,15 +26,6 @@ func ShellCommand(tc transcript.ToolCall) string {
 	return ""
 }
 
-// PathFromInput extracts a file path from a tool call's input fields.
-func PathFromInput(tc transcript.ToolCall, tool string) string {
-	if p := transcript.PathFromToolInput(tc); p != "" {
-		return p
-	}
-	_ = tool
-	return ""
-}
-
 // HasMutating reports whether any tool call mutates project state.
 func HasMutating(calls []transcript.ToolCall) bool {
 	for _, tc := range calls {

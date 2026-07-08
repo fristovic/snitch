@@ -155,7 +155,7 @@ func fileToolTargets(calls []transcript.ToolCall, target, cwd string) bool {
 		}
 		p := tc.Target
 		if p == "" {
-			p = PathFromInput(tc, tc.Name)
+			p = transcript.PathFromToolInput(tc)
 		}
 		if pathsMatch(p, target, abs, cwd) {
 			return true
@@ -172,7 +172,7 @@ func distinctFileToolCount(calls []transcript.ToolCall) int {
 		}
 		p := tc.Target
 		if p == "" {
-			p = PathFromInput(tc, tc.Name)
+			p = transcript.PathFromToolInput(tc)
 		}
 		p = NormalizePathToken(p)
 		if p != "" {
@@ -199,7 +199,7 @@ func touchesTestFiles(calls []transcript.ToolCall) bool {
 		}
 		p := tc.Target
 		if p == "" {
-			p = PathFromInput(tc, tc.Name)
+			p = transcript.PathFromToolInput(tc)
 		}
 		base := strings.ToLower(filepath.Base(p))
 		if strings.Contains(base, "_test.") || strings.HasSuffix(base, "_test.go") {

@@ -1,8 +1,10 @@
 package record
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -112,27 +114,19 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// DB exposes the underlying database for analytics aggregation.
-func (s *Store) DB() *sql.DB {
-	return s.db
-}
-
 // InsertRun inserts a new run record.
 func (s *Store) InsertRun(run Run) error {
 	if run.CreatedAt.IsZero() {
 		run.CreatedAt = time.Now().UTC()
 	}
-	if run.Harness == "" {
-		run.Harness = "cursor"
-	}
 	cmd := scrub.Scrub(run.Command)
 	_, err := s.db.Exec(`
 		INSERT INTO runs (id, created_at, session_id, transcript_path, project_path,
-			harness, command, duration_ms, output_hash, tool_call_count, verdict, max_severity,
+			harness, model, command, duration_ms, output_hash, tool_call_count, verdict, max_severity,
 			claim_count, verified_claims, false_claims, device_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		run.ID, run.CreatedAt.Format(time.RFC3339), run.SessionID, run.TranscriptPath, run.ProjectPath,
-		run.Harness, cmd, run.DurationMS, run.OutputHash, run.ToolCallCount, string(run.Verdict),
+		run.Harness, run.Model, cmd, run.DurationMS, run.OutputHash, run.ToolCallCount, string(run.Verdict),
 		run.MaxSeverity, run.ClaimCount, run.VerifiedClaims, run.FalseClaims, run.DeviceID)
 	return err
 }
@@ -143,6 +137,182 @@ func (s *Store) UpdateRunVerdict(runID string, verdict Verdict, maxSeverity int,
 		UPDATE runs SET verdict=?, max_severity=?, claim_count=?, verified_claims=?, false_claims=?
 		WHERE id=?`, string(verdict), maxSeverity, claimCount, verified, falseClaims, runID)
 	return err
+}
+
+// SetRunLabel records a user's feedback verdict on a run. label is "correct"
+// or "incorrect"; shared indicates opt-in to telemetry; session is a dedup key.
+func (s *Store) SetRunLabel(runID, label string, shared bool, session string) error {
+	sharedInt := 0
+	if shared {
+		sharedInt = 1
+	}
+	ts := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(`
+		UPDATE runs SET label_verdict=?, label_shared=?, label_timestamp=?, label_session=?
+		WHERE id=?`, label, sharedInt, ts, session, runID)
+	return err
+}
+
+// GetRunLabel loads a run's label fields. Returns LabelVerdict="" if unlabeled.
+func (s *Store) GetRunLabel(runID string) (verdict string, shared bool, ts time.Time, synced bool, err error) {
+	var lv sql.NullString
+	var ls, lsyn sql.NullInt64
+	var lts sql.NullString
+	e := s.db.QueryRow(`
+		SELECT label_verdict, label_shared, label_timestamp, label_synced
+		FROM runs WHERE id=?`, runID).Scan(&lv, &ls, &lts, &lsyn)
+	if e != nil {
+		return "", false, time.Time{}, false, e
+	}
+	if lts.Valid {
+		ts, _ = time.Parse(time.RFC3339, lts.String)
+	}
+	return lv.String, ls.Int64 != 0, ts, lsyn.Int64 != 0, nil
+}
+
+// UnsyncedLabels returns labeled-and-shared runs not yet forwarded by the
+// telemetry sync goroutine. Ordered oldest-first so we drain in arrival order.
+func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`
+		SELECT r.id, r.harness, r.model, r.label_verdict, r.label_timestamp, r.verdict,
+		       (SELECT c.claim_type FROM claims c WHERE c.run_id = r.id
+		        ORDER BY c.severity DESC LIMIT 1) AS top_claim_type,
+		       (SELECT c.claimed FROM claims c WHERE c.run_id = r.id
+		        ORDER BY c.severity DESC LIMIT 1) AS top_claimed
+		FROM runs r
+		WHERE r.label_shared = 1 AND r.label_synced = 0 AND r.label_verdict != ''
+		ORDER BY r.label_timestamp ASC
+		LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RunLabel
+	for rows.Next() {
+		var l RunLabel
+		var ts string
+		var model, verdict, topType, topClaimed sql.NullString
+		if err := rows.Scan(&l.RunID, &l.Harness, &model, &l.LabelVerdict, &ts, &verdict, &topType, &topClaimed); err != nil {
+			continue
+		}
+		l.Model = model.String
+		l.Verdict = Verdict(verdict.String)
+		l.ClaimType = topType.String
+		l.ClaimedTextHash = hashText(topClaimed.String)
+		l.LabeledAt, _ = time.Parse(time.RFC3339, ts)
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+// hashText returns the sha256 hex of s, or "" for empty input. Used so claim
+// text can be deduplicated server-side without the text ever leaving the machine.
+func hashText(s string) string {
+	if s == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// AddMissedClaim records a user-reported false negative: the agent claimed
+// something Snitch missed. Text is scrubbed and stored locally only.
+func (s *Store) AddMissedClaim(runID, claimed, actual string, shared bool) error {
+	sharedInt := 0
+	if shared {
+		sharedInt = 1
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO missed_claims (run_id, claimed, actual, shared, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		runID, scrub.Scrub(claimed), scrub.Scrub(actual), sharedInt,
+		time.Now().UTC().Format(time.RFC3339))
+	return err
+}
+
+// UnsyncedMissedClaims returns shared missed-claim reports not yet forwarded
+// by telemetry sync, expressed as RunLabels with LabelVerdict="added".
+// Harness/model attribution is joined from the linked run when present.
+func (s *Store) UnsyncedMissedClaims(limit int) ([]RunLabel, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`
+		SELECT m.id, COALESCE(m.run_id, ''), m.claimed, m.created_at,
+		       COALESCE(r.harness, ''), COALESCE(r.model, '')
+		FROM missed_claims m
+		LEFT JOIN runs r ON r.id = m.run_id
+		WHERE m.shared = 1 AND m.synced = 0
+		ORDER BY m.created_at ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RunLabel
+	for rows.Next() {
+		var l RunLabel
+		var claimed, ts string
+		if err := rows.Scan(&l.MissedID, &l.RunID, &claimed, &ts, &l.Harness, &l.Model); err != nil {
+			continue
+		}
+		l.LabelVerdict = "added"
+		l.ClaimType = "missed"
+		l.ClaimedTextHash = hashText(claimed)
+		l.LabeledAt, _ = time.Parse(time.RFC3339, ts)
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+// MarkMissedClaimsSynced flags missed-claim reports as forwarded.
+func (s *Store) MarkMissedClaimsSynced(ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`UPDATE missed_claims SET synced=1 WHERE id=?`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, id := range ids {
+		if _, err := stmt.Exec(id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// MarkLabelsSynced flags the given run ids as forwarded by telemetry sync.
+func (s *Store) MarkLabelsSynced(runIDs []string) error {
+	if len(runIDs) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`UPDATE runs SET label_synced=1 WHERE id=?`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, id := range runIDs {
+		if _, err := stmt.Exec(id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // InsertClaims inserts claim rows for a run.
@@ -194,7 +364,7 @@ func (s *Store) AnalyticsStats(since time.Time) (total int, sevDist map[string]i
 }
 
 const runSelectCols = `id, created_at, session_id, transcript_path, project_path,
-		harness, command, duration_ms, output_hash, tool_call_count, verdict, max_severity,
+		harness, model, command, duration_ms, output_hash, tool_call_count, verdict, max_severity,
 		claim_count, verified_claims, false_claims, device_id, trace`
 
 // GetRuns returns runs matching filter.
@@ -251,11 +421,6 @@ func (s *Store) GetRuns(filter RunFilter) ([]Run, error) {
 		runs = append(runs, r)
 	}
 	return runs, rows.Err()
-}
-
-// GetRunsByProject returns runs for a project path.
-func (s *Store) GetRunsByProject(projectPath string, limit int) ([]Run, error) {
-	return s.GetRuns(RunFilter{ProjectPath: projectPath, Limit: limit})
 }
 
 // CountDistinctSessions returns distinct session_id count.
@@ -411,6 +576,28 @@ func (s *Store) LieStats() (LieStats, error) {
 	return stats, rows.Err()
 }
 
+// RunCountsByHarness returns run counts grouped by harness.
+func (s *Store) RunCountsByHarness() (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT COALESCE(harness, ''), COUNT(*) FROM runs GROUP BY harness`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int)
+	for rows.Next() {
+		var h string
+		var n int
+		if err := rows.Scan(&h, &n); err != nil {
+			continue
+		}
+		if h == "" {
+			h = "unknown"
+		}
+		out[h] = n
+	}
+	return out, rows.Err()
+}
+
 // CountRuns returns total run count.
 func (s *Store) CountRuns() (int, error) {
 	var n int
@@ -463,14 +650,15 @@ type rowScanner interface {
 func scanRunRow(row rowScanner) (Run, error) {
 	var r Run
 	var created, verdict string
-	var traceJSON sql.NullString
+	var model, traceJSON sql.NullString
 	err := row.Scan(&r.ID, &created, &r.SessionID, &r.TranscriptPath, &r.ProjectPath,
-		&r.Harness, &r.Command, &r.DurationMS, &r.OutputHash, &r.ToolCallCount,
+		&r.Harness, &model, &r.Command, &r.DurationMS, &r.OutputHash, &r.ToolCallCount,
 		&verdict, &r.MaxSeverity, &r.ClaimCount, &r.VerifiedClaims, &r.FalseClaims,
 		&r.DeviceID, &traceJSON)
 	if err != nil {
 		return r, err
 	}
+	r.Model = model.String
 	r.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	r.Verdict = Verdict(verdict)
 	if traceJSON.Valid && traceJSON.String != "" {

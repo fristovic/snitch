@@ -27,12 +27,19 @@ type trayApp struct {
 
 	refreshCh chan struct{}
 
-	status     *systray.MenuItem
-	toggleItem *systray.MenuItem
-	showItem   *systray.MenuItem
+	status        *systray.MenuItem
+	toggleItem    *systray.MenuItem
+	showItem      *systray.MenuItem
+	thumbUpItem   *systray.MenuItem
+	thumbDownItem *systray.MenuItem
+	missedItem    *systray.MenuItem
+	shareItem     *systray.MenuItem
 	dashboardItem *systray.MenuItem
-	prefsItem  *systray.MenuItem
-	quitItem   *systray.MenuItem
+	prefsItem     *systray.MenuItem
+	quitItem      *systray.MenuItem
+
+	shareLabels  bool // persisted as telemetry.share_by_default
+	consentShown bool // persisted as telemetry.consent_shown
 }
 
 func newTrayApp(socket string) *trayApp {
@@ -55,6 +62,10 @@ func (a *trayApp) onReady() {
 	a.toggleItem = systray.AddMenuItem("Stop Snitching", "Start or stop lie detection")
 	systray.AddSeparator()
 	a.showItem = systray.AddMenuItem("Show Last Lie", "Open full verification log for the latest lie")
+	a.thumbUpItem = systray.AddMenuItem("👍 Was Snitch right", "Mark the last verdict correct — helps train Snitch")
+	a.thumbDownItem = systray.AddMenuItem("👎 Was Snitch wrong", "Mark the last verdict incorrect — helps train Snitch")
+	a.missedItem = systray.AddMenuItem("Report Missed Lie…", "Report a lie Snitch missed (opens terminal)")
+	a.shareItem = systray.AddMenuItemCheckbox("Share labels anonymously", "Share verdict metadata to train Snitch — no code or text leaves your machine", false)
 	a.dashboardItem = systray.AddMenuItem("Open Dashboard…", "Browse runs and lies in the interactive TUI")
 	systray.AddSeparator()
 	a.prefsItem = systray.AddMenuItem("Preferences…", "")
@@ -79,6 +90,15 @@ func (a *trayApp) handleClicks() {
 			a.acknowledgeAlert()
 			a.loadLatestLie()
 			a.showLastLie()
+		case <-a.thumbUpItem.ClickedCh:
+			a.submitLabel("correct")
+		case <-a.thumbDownItem.ClickedCh:
+			a.submitLabel("incorrect")
+		case <-a.missedItem.ClickedCh:
+			a.acknowledgeAlert()
+			_ = openTerminal(`snitch label missed --claimed "what the agent said" --actual "what actually happened"`)
+		case <-a.shareItem.ClickedCh:
+			a.toggleShare()
 		case <-a.dashboardItem.ClickedCh:
 			a.acknowledgeAlert()
 			_ = openTerminal("snitch dashboard")
@@ -125,6 +145,7 @@ func (a *trayApp) startWatching() {
 	a.state.Connected = true
 	a.mu.Unlock()
 	a.loadLatestLie()
+	a.loadShareState()
 	a.signalRefresh()
 }
 
@@ -185,6 +206,7 @@ func (a *trayApp) watchLoop() {
 			a.state.Alert = true
 			a.mu.Unlock()
 			a.loadLatestLie()
+			a.maybeShowConsent()
 			a.signalRefresh()
 			return nil
 		})
@@ -276,6 +298,113 @@ func (a *trayApp) loadLatestLie() {
 	a.mu.Lock()
 	a.state.Lie = &claims[0]
 	a.mu.Unlock()
+}
+
+// submitLabel records a "Was this right?" verdict for the latest lie. The
+// shared flag comes explicitly from the persisted "Share labels anonymously"
+// checkbox state.
+func (a *trayApp) submitLabel(verdict string) {
+	a.mu.Lock()
+	lie := a.state.Lie
+	shared := a.shareLabels
+	a.mu.Unlock()
+	if lie == nil {
+		a.flashTitle("No lie to label yet")
+		return
+	}
+	client, err := ipc.Connect(a.socket)
+	if err != nil {
+		return
+	}
+	defer client.Close()
+	if _, err := client.Call("set_label", map[string]any{
+		"run_id": lie.RunID,
+		"label":  verdict,
+		"shared": shared,
+	}); err != nil {
+		a.flashTitle("Couldn't save label")
+		return
+	}
+	a.flashTitle("Thanks — this helps train Snitch")
+}
+
+// loadShareState reads the persisted share/consent settings from the daemon.
+func (a *trayApp) loadShareState() {
+	client, err := ipc.Connect(a.socket)
+	if err != nil {
+		return
+	}
+	defer client.Close()
+	data, err := client.Call("get_config", nil)
+	if err != nil {
+		return
+	}
+	var cfg struct {
+		Telemetry struct {
+			ShareByDefault bool `yaml:"share_by_default" json:"share_by_default"`
+			ConsentShown   bool `yaml:"consent_shown" json:"consent_shown"`
+		} `json:"telemetry"`
+	}
+	if json.Unmarshal(data, &cfg) != nil {
+		return
+	}
+	a.mu.Lock()
+	a.shareLabels = cfg.Telemetry.ShareByDefault
+	a.consentShown = cfg.Telemetry.ConsentShown
+	a.mu.Unlock()
+	if a.shareLabels {
+		a.shareItem.Check()
+	} else {
+		a.shareItem.Uncheck()
+	}
+}
+
+// toggleShare flips the anonymous-sharing opt-in and persists it via config.
+func (a *trayApp) toggleShare() {
+	a.mu.Lock()
+	a.shareLabels = !a.shareLabels
+	on := a.shareLabels
+	a.mu.Unlock()
+	if on {
+		a.shareItem.Check()
+	} else {
+		a.shareItem.Uncheck()
+	}
+	a.setConfig("telemetry.share_by_default", fmt.Sprintf("%v", on))
+}
+
+// maybeShowConsent shows the one-time telemetry consent prompt on the first
+// detected lie. It never enables sharing — it only informs; the user opts in
+// via the checkbox or CLI.
+func (a *trayApp) maybeShowConsent() {
+	a.mu.Lock()
+	shown := a.consentShown
+	a.consentShown = true
+	a.mu.Unlock()
+	if shown {
+		return
+	}
+	a.setConfig("telemetry.consent_shown", "true")
+	a.flashTitle("Snitch can train a smarter lie detector from anonymous verdicts — enable 'Share labels anonymously' to help. No code ever leaves your machine.")
+}
+
+// setConfig persists a config key through the daemon.
+func (a *trayApp) setConfig(key, value string) {
+	client, err := ipc.Connect(a.socket)
+	if err != nil {
+		return
+	}
+	defer client.Close()
+	_, _ = client.Call("set_config", map[string]any{"key": key, "value": value})
+}
+
+// flashTitle briefly sets the menu-bar tooltip to msg, used for label feedback.
+func (a *trayApp) flashTitle(msg string) {
+	go func() {
+		systray.SetTooltip(msg)
+		time.Sleep(2500 * time.Millisecond)
+		systray.SetTooltip("Snitch")
+	}()
 }
 
 func setTrayIcon(icon, icon2x []byte) {

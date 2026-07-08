@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/fristovic/snitch/internal/severity"
 	"github.com/fristovic/snitch/internal/transcript"
@@ -146,17 +145,14 @@ func TestContradictionNoAction(t *testing.T) {
 	}
 }
 
-func TestTerminalFileParsing(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/terminals/1.txt"
-	// exercised indirectly via time window helper defaults
-	_ = time.Now()
+// TestShellOutputNoResolver: with no shell resolver and no inline result,
+// ShellOutputForCommand must report not-found rather than inventing output.
+func TestShellOutputNoResolver(t *testing.T) {
 	_, _, found := verifiers.ShellOutputForCommand(transcript.ToolCall{
 		Name:   "Shell",
 		Target: "echo hi",
 	}, verifiers.VerifyContext{})
 	if found {
-		t.Fatal("expected no terminal match in empty context")
+		t.Fatal("expected no shell output without resolver or inline result")
 	}
-	_ = path
 }

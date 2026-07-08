@@ -57,7 +57,7 @@ func LoadSubagentToolCalls(parentPath string, windowStart, windowEnd time.Time) 
 }
 
 func toolCallsInWindow(path string, windowStart, windowEnd, fileModTime time.Time) ([]ToolCall, error) {
-	lines, _, err := ParseLines(path, 0)
+	lines, _, err := ParseLinesWith(CursorParser{}, path, 0)
 	if err != nil {
 		return nil, err
 	}

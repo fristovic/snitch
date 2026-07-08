@@ -9,12 +9,12 @@ Report via [GitHub Security Advisories](https://github.com/fristovic/snitch/secu
 See [ARCHITECTURE.md](ARCHITECTURE.md) and [docs/security.md](docs/security.md).
 
 - Snitch runs as the user, not root
-- All verification data stays local by default; analytics is opt-in and contains no raw text
-- Secret scrubbing runs before any command or output is stored
-- Snitch reads local Cursor transcript files only — no network MITM or proxy
+- All verification data stays local by default; telemetry and analytics are both opt-in and contain no raw text (metadata plus a SHA-256 hash of claim text for dedup)
+- Secret scrubbing runs before any command, output, or turn snapshot is stored
+- Snitch reads local agent transcript artifacts only (Cursor/Claude Code/Codex/Pi JSONL, OpenCode SQLite) — no network MITM or proxy
 
 ## Supported versions
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | Yes       |
+| latest release | Yes |

@@ -1,7 +1,6 @@
 package verifiers
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -10,8 +9,12 @@ import (
 )
 
 // ShellOutputForCommand returns captured output for a shell tool call.
-// Resolution order: tool_result on the call, then Cursor terminal files.
+// Resolution order: inline tool_result on the call, then harness-specific
+// shell artifacts via ctx.ShellOutputResolver (Cursor terminal files for
+// cursor; no-op for harnesses that embed output inline). A relaxed time window
+// retry covers terminals that finish slightly after the turn.
 func ShellOutputForCommand(tc transcript.ToolCall, ctx VerifyContext) (output string, exitCode int, found bool) {
+	// Step 1: inline tool_result (harness-agnostic).
 	if tc.Result != "" || tc.IsError {
 		code := 0
 		if tc.IsError {
@@ -19,134 +22,31 @@ func ShellOutputForCommand(tc transcript.ToolCall, ctx VerifyContext) (output st
 		}
 		return tc.Result, code, true
 	}
+	// Step 2: extract the command string.
 	cmd := ShellCommand(tc)
 	if cmd == "" {
 		return "", 0, false
 	}
-	out, code, ok := terminalOutputForCommand(ctx.TranscriptPath, cmd, ctx.StartedAt, ctx.FinishedAt)
-	if ok {
+	resolver := ctx.ShellOutputResolver
+	if resolver == nil {
+		return "", 0, false
+	}
+	// Step 3: harness-specific resolution, tight window.
+	req := transcript.ShellOutputRequest{
+		TranscriptPath: ctx.TranscriptPath,
+		ProjectPath:    ctx.ProjectPath,
+		Cwd:            ctx.Cwd,
+		Command:        cmd,
+		StartedAt:      ctx.StartedAt,
+		FinishedAt:     ctx.FinishedAt,
+	}
+	if out, code, ok := resolver.Resolve(tc, req); ok {
 		return out, code, true
 	}
-	// Relaxed window: terminal may finish slightly after turn or start before capture.
-	return terminalOutputForCommand(ctx.TranscriptPath, cmd, ctx.StartedAt.Add(-5*time.Minute), ctx.FinishedAt.Add(10*time.Minute))
-}
-
-func terminalOutputForCommand(transcriptPath, command string, start, end time.Time) (string, int, bool) {
-	projectDir := transcript.CursorProjectDirFromTranscriptPath(transcriptPath)
-	if projectDir == "" {
-		return "", 0, false
-	}
-	termDir := filepath.Join(projectDir, "terminals")
-	entries, err := os.ReadDir(termDir)
-	if err != nil {
-		return "", 0, false
-	}
-	command = strings.TrimSpace(command)
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".txt") {
-			continue
-		}
-		rec, ok := parseTerminalFile(filepath.Join(termDir, e.Name()))
-		if !ok {
-			continue
-		}
-		if !commandsMatch(rec.Command, command) {
-			continue
-		}
-		if !timeInWindow(rec.EndedAt, start, end) {
-			continue
-		}
-		return rec.Output, rec.ExitCode, true
-	}
-	return "", 0, false
-}
-
-type terminalRecord struct {
-	Command  string
-	Output   string
-	ExitCode int
-	EndedAt  time.Time
-}
-
-func parseTerminalFile(path string) (terminalRecord, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return terminalRecord{}, false
-	}
-	text := string(data)
-	parts := strings.Split(text, "\n---\n")
-	if len(parts) < 3 {
-		return terminalRecord{}, false
-	}
-	meta := parts[0]
-	body := strings.TrimSpace(parts[1])
-	footer := parts[len(parts)-1]
-
-	var rec terminalRecord
-	rec.Output = body
-	for _, line := range strings.Split(meta, "\n") {
-		if strings.HasPrefix(line, "command: ") {
-			rec.Command = strings.Trim(strings.TrimPrefix(line, "command: "), `"`)
-		}
-		if strings.HasPrefix(line, "started_at: ") {
-			if t, err := time.Parse(time.RFC3339Nano, strings.TrimPrefix(line, "started_at: ")); err == nil {
-				rec.EndedAt = t
-			}
-		}
-	}
-	for _, line := range strings.Split(footer, "\n") {
-		if strings.HasPrefix(line, "exit_code: ") {
-			var code int
-			if _, err := parseIntPrefix(line, "exit_code: ", &code); err == nil {
-				rec.ExitCode = code
-			}
-		}
-		if strings.HasPrefix(line, "ended_at: ") {
-			if t, err := time.Parse(time.RFC3339Nano, strings.TrimPrefix(line, "ended_at: ")); err == nil {
-				rec.EndedAt = t
-			}
-		}
-	}
-	if rec.Command == "" {
-		return terminalRecord{}, false
-	}
-	return rec, true
-}
-
-func parseIntPrefix(line, prefix string, out *int) (bool, error) {
-	val := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	n := 0
-	for _, c := range val {
-		if c < '0' || c > '9' {
-			break
-		}
-		n = n*10 + int(c-'0')
-	}
-	*out = n
-	return true, nil
-}
-
-func commandsMatch(a, b string) bool {
-	a = normalizeCommand(a)
-	b = normalizeCommand(b)
-	if a == b {
-		return true
-	}
-	return strings.Contains(a, b) || strings.Contains(b, a)
-}
-
-func normalizeCommand(cmd string) string {
-	cmd = strings.TrimSpace(cmd)
-	cmd = strings.Trim(cmd, `"'`)
-	return strings.Join(strings.Fields(cmd), " ")
-}
-
-func timeInWindow(t, start, end time.Time) bool {
-	if t.IsZero() || start.IsZero() || end.IsZero() {
-		return true
-	}
-	// Allow terminal files that finished shortly after the turn ended.
-	return !t.Before(start.Add(-2*time.Minute)) && !t.After(end.Add(5*time.Minute))
+	// Step 4: relaxed window (terminal may finish slightly after turn).
+	req.StartedAt = ctx.StartedAt.Add(-5 * time.Minute)
+	req.FinishedAt = ctx.FinishedAt.Add(10 * time.Minute)
+	return resolver.Resolve(tc, req)
 }
 
 // ParseTestOutput inspects command output for pass/fail signals.

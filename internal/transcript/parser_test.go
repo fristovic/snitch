@@ -10,7 +10,7 @@ import (
 
 func TestParseLinesToolUse(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "sample_transcripts", "cursor_tools.jsonl")
-	lines, off, err := transcript.ParseLines(path, 0)
+	lines, off, err := transcript.ParseLinesWith(transcript.CursorParser{}, path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestParseLinesToolUse(t *testing.T) {
 
 func TestParseLinesToolResults(t *testing.T) {
 	path := filepath.Join("..", "..", "test", "fixtures", "sample_transcripts", "cursor_tool_results.jsonl")
-	lines, _, err := transcript.ParseLines(path, 0)
+	lines, _, err := transcript.ParseLinesWith(transcript.CursorParser{}, path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,26 +57,17 @@ func TestParseLinesToolResults(t *testing.T) {
 	}
 }
 
-func TestProjectCwdFromTranscriptPath(t *testing.T) {
-	path := "/Users/alice/.cursor/projects/Users-alice-code-snitch/agent-transcripts/uuid/uuid.jsonl"
-	cwd := transcript.ProjectCwdFromTranscriptPath(path)
-	if cwd != "/Users/alice/code/snitch" {
-		t.Fatalf("got %q", cwd)
+func TestCursorPathResolver(t *testing.T) {
+	r := transcript.CursorPathResolver{}
+	path := "/Users/alice/.cursor/projects/Users-alice-code-snitch/agent-transcripts/abc-123/abc-123.jsonl"
+	if cwd := r.ProjectCwd(path); cwd != "/Users/alice/code/snitch" {
+		t.Fatalf("ProjectCwd got %q", cwd)
 	}
-}
-
-func TestCursorProjectDirFromTranscriptPath(t *testing.T) {
-	path := "/Users/alice/.cursor/projects/Users-alice-code-snitch/agent-transcripts/uuid/uuid.jsonl"
-	dir := transcript.CursorProjectDirFromTranscriptPath(path)
-	if dir == "" || !filepath.IsAbs(dir) {
-		t.Fatalf("got %q", dir)
+	if dir := r.ProjectDir(path); dir == "" || !filepath.IsAbs(dir) {
+		t.Fatalf("ProjectDir got %q", dir)
 	}
-}
-
-func TestSessionIDFromTranscriptPath(t *testing.T) {
-	path := "/Users/alice/.cursor/projects/Users-alice/agent-transcripts/abc-123/abc-123.jsonl"
-	if got := transcript.SessionIDFromTranscriptPath(path); got != "abc-123" {
-		t.Fatalf("got %q", got)
+	if got := r.SessionID(path); got != "abc-123" {
+		t.Fatalf("SessionID got %q", got)
 	}
 }
 
@@ -88,7 +79,7 @@ func TestParseMalformedLineSkipped(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	lines, _, err := transcript.ParseLines(path, 0)
+	lines, _, err := transcript.ParseLinesWith(transcript.CursorParser{}, path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

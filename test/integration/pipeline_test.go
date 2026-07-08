@@ -16,7 +16,7 @@ import (
 
 func TestTranscriptParseFixture(t *testing.T) {
 	path := filepath.Join("..", "fixtures", "sample_transcripts", "cursor_tools.jsonl")
-	lines, _, err := transcript.ParseLines(path, 0)
+	lines, _, err := transcript.ParseLinesWith(transcript.CursorParser{}, path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestPipelineParseVerifyStore(t *testing.T) {
 	defer capEngine.Stop()
 
 	verified := make(chan record.Verdict, 1)
-	verifyEngine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	verifyEngine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	verifyEngine.OnVerified(func(p event.RunVerifiedPayload) {
 		select {
 		case verified <- p.Verdict:
@@ -111,7 +111,7 @@ func TestPipelineTestPassLieEndToEnd(t *testing.T) {
 	capEngine.Start()
 	defer capEngine.Stop()
 
-	verifyEngine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	verifyEngine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	verifyEngine.Start()
 
 	turn := transcript.TurnCompleted{
@@ -142,7 +142,7 @@ func TestPipelineTestPassLieEndToEnd(t *testing.T) {
 		t.Fatalf("expected fail verdict, got %+v", run)
 	}
 
-	claims, _ := store.GetClaims( record.ClaimFilter{LiesOnly: true, ClaimType: "test_pass"})
+	claims, _ := store.GetClaims(record.ClaimFilter{LiesOnly: true, ClaimType: "test_pass"})
 	if len(claims) == 0 {
 		t.Fatal("expected test_pass lie via get_claims filter")
 	}

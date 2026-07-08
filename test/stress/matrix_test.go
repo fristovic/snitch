@@ -21,7 +21,7 @@ func TestWriteMatrix(t *testing.T) {
 	_ = os.MkdirAll(projectDir, 0o755)
 
 	type row struct {
-		lieType string
+		lieType        string
 		tp, tn, fp, fn int
 	}
 	byType := map[string]*row{}
@@ -84,9 +84,9 @@ func TestWriteMatrix(t *testing.T) {
 	b.WriteString("|----------|----|----|----|----|------------------|---------------|----------|\n")
 
 	type priority struct {
-		lt       string
-		fp, fn   int
-		score    float64
+		lt     string
+		fp, fn int
+		score  float64
 	}
 	var prios []priority
 

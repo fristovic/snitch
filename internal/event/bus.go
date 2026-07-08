@@ -2,6 +2,7 @@ package event
 
 import (
 	"encoding/json"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -12,7 +13,6 @@ type EventType string
 const (
 	EventTurnCompleted EventType = "TurnCompleted"
 	EventRunCaptured   EventType = "RunCaptured"
-	EventRunVerified   EventType = "RunVerified"
 )
 
 // Event is a typed message on the internal pub/sub bus.
@@ -47,32 +47,20 @@ func (b *Bus) Subscribe(t EventType) <-chan Event {
 	return ch
 }
 
-// SubscribeAll returns a channel for all event types.
-func (b *Bus) SubscribeAll() <-chan Event {
-	return b.Subscribe("")
-}
-
-// Publish sends an event to all subscribers of its type and to wildcard subscribers.
+// Publish sends an event to all subscribers of its type. Events are dropped
+// (with a warning) when a subscriber's buffer is full rather than blocking
+// the producer.
 func (b *Bus) Publish(e Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if b.closed {
 		return
 	}
-	if subs, ok := b.subscribers[e.Type]; ok {
-		for _, ch := range subs {
-			select {
-			case ch <- e:
-			default:
-			}
-		}
-	}
-	if subs, ok := b.subscribers[""]; ok {
-		for _, ch := range subs {
-			select {
-			case ch <- e:
-			default:
-			}
+	for _, ch := range b.subscribers[e.Type] {
+		select {
+		case ch <- e:
+		default:
+			slog.Warn("event bus dropped event (subscriber buffer full)", "type", e.Type, "id", e.ID)
 		}
 	}
 }

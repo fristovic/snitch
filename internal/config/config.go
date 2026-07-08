@@ -13,13 +13,14 @@ import (
 
 // Config is the root Snitch configuration.
 type Config struct {
-	Daemon       DaemonConfig       `yaml:"daemon"`
-	Cursor       CursorConfig       `yaml:"cursor"`
-	Verification VerificationConfig `yaml:"verification"`
-	Analytics    AnalyticsConfig    `yaml:"analytics"`
-	Retention    RetentionConfig    `yaml:"retention"`
-	Display      DisplayConfig      `yaml:"display"`
+	Daemon        DaemonConfig        `yaml:"daemon"`
+	Platforms     PlatformsConfig     `yaml:"platforms"`
+	Verification  VerificationConfig  `yaml:"verification"`
+	Analytics     AnalyticsConfig     `yaml:"analytics"`
+	Retention     RetentionConfig     `yaml:"retention"`
+	Display       DisplayConfig       `yaml:"display"`
 	Notifications NotificationsConfig `yaml:"notifications"`
+	Telemetry     TelemetryConfig     `yaml:"telemetry"`
 }
 
 type DaemonConfig struct {
@@ -28,13 +29,65 @@ type DaemonConfig struct {
 	LogLevel   string `yaml:"log_level"`
 }
 
-type CursorConfig struct {
+// PlatformConfig configures one harness's ingestion. TranscriptWatchPath is
+// the watch root for JSONL harnesses (Cursor, Claude, Codex, Pi); for OpenCode
+// it is the path to opencode.db.
+type PlatformConfig struct {
 	Enabled             bool   `yaml:"enabled"`
 	TranscriptWatchPath string `yaml:"transcript_watch_path"`
 }
 
+// PlatformsConfig holds per-harness ingestion settings.
+type PlatformsConfig struct {
+	Cursor   PlatformConfig `yaml:"cursor"`
+	Claude   PlatformConfig `yaml:"claude"`
+	Codex    PlatformConfig `yaml:"codex"`
+	Pi       PlatformConfig `yaml:"pi"`
+	OpenCode PlatformConfig `yaml:"opencode"`
+}
+
+// byHarness is the single source of truth mapping harness names to platform
+// config fields. ForHarness, Set, Get, and path expansion all iterate it.
+func (p *PlatformsConfig) byHarness() map[string]*PlatformConfig {
+	return map[string]*PlatformConfig{
+		"cursor":   &p.Cursor,
+		"claude":   &p.Claude,
+		"codex":    &p.Codex,
+		"pi":       &p.Pi,
+		"opencode": &p.OpenCode,
+	}
+}
+
+// HarnessNames returns every known harness name in stable order. This is the
+// canonical list — CLI surfaces and the daemon iterate it instead of
+// hardcoding their own copies.
+func HarnessNames() []string {
+	return []string{"cursor", "claude", "codex", "pi", "opencode"}
+}
+
+// ForHarness returns the PlatformConfig for a harness name.
+func (p *PlatformsConfig) ForHarness(name string) (PlatformConfig, bool) {
+	pc, ok := p.byHarness()[name]
+	if !ok {
+		return PlatformConfig{}, false
+	}
+	return *pc, true
+}
+
+// TelemetryConfig controls opt-in sharing of labeled verdicts to train a
+// future semantic verifier. Off by default; users must explicitly enable.
+type TelemetryConfig struct {
+	Enabled        bool   `yaml:"enabled" json:"enabled"`
+	Endpoint       string `yaml:"endpoint" json:"endpoint"`
+	IntervalM      int    `yaml:"interval_m" json:"interval_m"`
+	ShareByDefault bool   `yaml:"share_by_default" json:"share_by_default"`
+	// ConsentShown tracks whether the one-time telemetry consent prompt has
+	// been displayed (Snitch Bar shows it on the first detected lie).
+	ConsentShown bool `yaml:"consent_shown" json:"consent_shown"`
+}
+
 type VerificationConfig struct {
-	MaxConcurrentVerifications int                `yaml:"max_concurrent_verifications"`
+	MaxConcurrentVerifications int                 `yaml:"max_concurrent_verifications"`
 	ShellVerifier              ShellVerifierConfig `yaml:"shell_verifier"`
 }
 
@@ -105,7 +158,11 @@ func LoadFromPlatform() (*Config, *platform.Paths, error) {
 	} else {
 		cfg.Daemon.SocketPath = platform.ExpandHome(cfg.Daemon.SocketPath)
 	}
-	cfg.Cursor.TranscriptWatchPath = platform.ExpandHome(cfg.Cursor.TranscriptWatchPath)
+
+	// Expand watch paths for every platform.
+	for _, pc := range cfg.Platforms.byHarness() {
+		pc.TranscriptWatchPath = platform.ExpandHome(pc.TranscriptWatchPath)
+	}
 	return cfg, paths, nil
 }
 
@@ -126,6 +183,12 @@ func (c *Config) Set(key, value string) error {
 	switch key {
 	case "analytics.enabled":
 		c.Analytics.Enabled = value == "true"
+	case "telemetry.enabled":
+		c.Telemetry.Enabled = value == "true"
+	case "telemetry.share_by_default":
+		c.Telemetry.ShareByDefault = value == "true"
+	case "telemetry.consent_shown":
+		c.Telemetry.ConsentShown = value == "true"
 	case "retention.days", "retention.max_days":
 		v, err := strconv.Atoi(value)
 		if err != nil {
@@ -152,6 +215,16 @@ func (c *Config) Set(key, value string) error {
 			c.Verification.ShellVerifier.AllowRerun[path] = value == "true"
 			return nil
 		}
+		// platforms.<name>.enabled
+		if strings.HasPrefix(key, "platforms.") && strings.HasSuffix(key, ".enabled") {
+			name := strings.TrimSuffix(strings.TrimPrefix(key, "platforms."), ".enabled")
+			pc, ok := c.Platforms.byHarness()[name]
+			if !ok {
+				return fmt.Errorf("unknown platform: %s", name)
+			}
+			pc.Enabled = value == "true"
+			return nil
+		}
 		return fmt.Errorf("unknown config key: %s", key)
 	}
 	return nil
@@ -162,6 +235,12 @@ func (c *Config) Get(key string) (string, error) {
 	switch key {
 	case "analytics.enabled":
 		return fmt.Sprintf("%v", c.Analytics.Enabled), nil
+	case "telemetry.enabled":
+		return fmt.Sprintf("%v", c.Telemetry.Enabled), nil
+	case "telemetry.share_by_default":
+		return fmt.Sprintf("%v", c.Telemetry.ShareByDefault), nil
+	case "telemetry.consent_shown":
+		return fmt.Sprintf("%v", c.Telemetry.ConsentShown), nil
 	case "retention.max_days":
 		return fmt.Sprintf("%d", c.Retention.MaxDays), nil
 	case "notifications.enabled":
@@ -178,6 +257,14 @@ func (c *Config) Get(key string) (string, error) {
 				return fmt.Sprintf("%v", c.Verification.ShellVerifier.AllowRerun[path]), nil
 			}
 			return "false", nil
+		}
+		if strings.HasPrefix(key, "platforms.") && strings.HasSuffix(key, ".enabled") {
+			name := strings.TrimSuffix(strings.TrimPrefix(key, "platforms."), ".enabled")
+			pc, ok := c.Platforms.byHarness()[name]
+			if !ok {
+				return "", fmt.Errorf("unknown platform: %s", name)
+			}
+			return fmt.Sprintf("%v", pc.Enabled), nil
 		}
 		return "", fmt.Errorf("unknown config key: %s", key)
 	}

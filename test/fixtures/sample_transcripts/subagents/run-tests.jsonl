@@ -1,2 +1,0 @@
-{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell","input":{"command":"go test ./..."}}]}}
-{"type":"turn_ended","status":"success"}

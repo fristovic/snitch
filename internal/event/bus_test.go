@@ -23,20 +23,9 @@ func TestBusPublishSubscribe(t *testing.T) {
 	}
 }
 
-func TestBusWildcard(t *testing.T) {
-	bus := event.NewBus()
-	defer bus.Close()
-	ch := bus.SubscribeAll()
-	bus.Publish(event.Event{ID: "x", Type: event.EventRunCaptured, Timestamp: time.Now()})
-	ev := <-ch
-	if ev.Type != event.EventRunCaptured {
-		t.Fatalf("unexpected type %s", ev.Type)
-	}
-}
-
 func TestBusClose(t *testing.T) {
 	bus := event.NewBus()
-	ch := bus.Subscribe(event.EventRunVerified)
+	ch := bus.Subscribe(event.EventRunCaptured)
 	bus.Close()
 	_, ok := <-ch
 	if ok {

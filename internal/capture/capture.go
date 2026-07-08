@@ -30,6 +30,7 @@ type RunPayload struct {
 	ToolCalls      []transcript.ToolCall `json:"tool_calls"`
 	ToolCallCount  int                   `json:"tool_call_count"`
 	Harness        string                `json:"harness,omitempty"`
+	Model          string                `json:"model,omitempty"`
 	Command        string                `json:"command,omitempty"`
 	StartedAt      time.Time             `json:"started_at"`
 	FinishedAt     time.Time             `json:"finished_at"`
@@ -81,13 +82,26 @@ func (e *Engine) onTurnCompleted(ev event.Event) {
 		return
 	}
 
+	payload := BuildRunPayload(turn)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("marshal RunCaptured", "err", err)
+		return
+	}
+	e.bus.Publish(event.Event{
+		ID: turn.RunID, Timestamp: turn.FinishedAt, Source: "capture",
+		Type: event.EventRunCaptured, Payload: data,
+	})
+}
+
+// BuildRunPayload converts a completed turn into a run payload (scrubbed and
+// truncated output). Shared by the live capture path and offline replay.
+func BuildRunPayload(turn transcript.TurnCompleted) RunPayload {
 	output := scrub.Scrub(strings.TrimSpace(turn.UserText + "\n" + turn.AssistantText))
 	if len(output) > maxOutputBytes {
 		output = output[:maxOutputBytes]
 	}
-
-	command := truncate(turn.UserText, 500)
-	payload := RunPayload{
+	return RunPayload{
 		RunID:          turn.RunID,
 		SessionID:      turn.SessionID,
 		TranscriptPath: turn.TranscriptPath,
@@ -98,22 +112,14 @@ func (e *Engine) onTurnCompleted(ev event.Event) {
 		AssistantText:  turn.AssistantText,
 		ToolCalls:      turn.ToolCalls,
 		ToolCallCount:  len(turn.ToolCalls),
-		Harness:        "cursor",
-		Command:        command,
+		Harness:        turn.Harness,
+		Model:          turn.Model,
+		Command:        truncate(turn.UserText, 500),
 		StartedAt:      turn.StartedAt,
 		FinishedAt:     turn.FinishedAt,
 		EndHEAD:        turn.EndHEAD,
 		FileManifest:   turn.FileManifest,
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		slog.Error("marshal RunCaptured", "err", err)
-		return
-	}
-	e.bus.Publish(event.Event{
-		ID: turn.RunID, Timestamp: turn.FinishedAt, Source: "capture",
-		Type: event.EventRunCaptured, Payload: data,
-	})
 }
 
 func truncate(s string, n int) string {
@@ -135,9 +141,4 @@ func (e *Engine) Stop() {
 func HashOutput(output string) string {
 	h := sha256.Sum256([]byte(output))
 	return hex.EncodeToString(h[:])
-}
-
-// NowUTC returns current UTC time.
-func NowUTC() time.Time {
-	return time.Now().UTC()
 }

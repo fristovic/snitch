@@ -140,20 +140,17 @@ func (s *Server) handle(conn net.Conn) {
 			s.handleGetRun(req, writeResp)
 		case "get_claims":
 			s.handleGetClaims(req, writeResp)
-		case "lie_stats":
-			s.handleLieStats(req, writeResp)
 		case "get_config":
 			result, _ := json.Marshal(s.deps.Config)
 			writeResp(Response{ID: req.ID, Result: result})
 		case "set_config":
 			s.handleSetConfig(req, writeResp)
+		case "set_label":
+			s.handleSetLabel(req, writeResp)
+		case "add_missed_claim":
+			s.handleAddMissedClaim(req, writeResp)
 		case "subscribe":
 			s.handleSubscribe(req, conn, writeResp, &writeMu, writer)
-		case "unsubscribe":
-			s.mu.Lock()
-			delete(s.subs, conn)
-			s.mu.Unlock()
-			writeResp(Response{ID: req.ID, Result: json.RawMessage(`{"ok":true}`)})
 		default:
 			writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "UNKNOWN_METHOD", Message: req.Method}})
 		}
@@ -165,6 +162,7 @@ func (s *Server) handleStatus(req Request, writeResp func(Response)) {
 	lieStats, _ := s.deps.Store.LieStats()
 	projects, _ := s.deps.Store.CountDistinctProjects()
 	sessions, _ := s.deps.Store.CountDistinctSessions()
+	byHarness, _ := s.deps.Store.RunCountsByHarness()
 	result, _ := json.Marshal(record.DaemonStatus{
 		Running:         true,
 		UptimeSeconds:   int64(time.Since(s.deps.StartTime).Seconds()),
@@ -174,6 +172,7 @@ func (s *Server) handleStatus(req Request, writeResp func(Response)) {
 		TopLieType:      lieStats.TopClaimType,
 		ProjectsWatched: projects,
 		SessionsSeen:    sessions,
+		RunsByHarness:   byHarness,
 		LieStats:        lieStats,
 	})
 	writeResp(Response{ID: req.ID, Result: result})
@@ -186,6 +185,7 @@ func (s *Server) handleGetRuns(req Request, writeResp func(Response)) {
 		Verdict      string `json:"verdict"`
 		ProjectPath  string `json:"project_path"`
 		SessionID    string `json:"session_id"`
+		Harness      string `json:"harness"`
 		Search       string `json:"search"`
 		Since        string `json:"since"`
 		FailuresOnly bool   `json:"failures_only"`
@@ -193,8 +193,8 @@ func (s *Server) handleGetRuns(req Request, writeResp func(Response)) {
 	_ = json.Unmarshal(req.Params, &p)
 	filter := record.RunFilter{
 		Limit: p.Limit, Offset: p.Offset, Verdict: p.Verdict,
-		ProjectPath: p.ProjectPath, SessionID: p.SessionID, Search: p.Search,
-		FailuresOnly: p.FailuresOnly,
+		ProjectPath: p.ProjectPath, SessionID: p.SessionID, Harness: p.Harness,
+		Search: p.Search, FailuresOnly: p.FailuresOnly,
 	}
 	if p.Since != "" {
 		if t, err := time.Parse(time.RFC3339, p.Since); err == nil {
@@ -266,16 +266,6 @@ func (s *Server) handleGetClaims(req Request, writeResp func(Response)) {
 	writeResp(Response{ID: req.ID, Result: result})
 }
 
-func (s *Server) handleLieStats(req Request, writeResp func(Response)) {
-	stats, err := s.deps.Store.LieStats()
-	if err != nil {
-		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INTERNAL", Message: err.Error()}})
-		return
-	}
-	result, _ := json.Marshal(stats)
-	writeResp(Response{ID: req.ID, Result: result})
-}
-
 func (s *Server) handleSetConfig(req Request, writeResp func(Response)) {
 	var p struct {
 		Key   string `json:"key"`
@@ -293,6 +283,54 @@ func (s *Server) handleSetConfig(req Request, writeResp func(Response)) {
 		}
 	}
 	result, _ := json.Marshal(map[string]bool{"ok": true})
+	writeResp(Response{ID: req.ID, Result: result})
+}
+
+// handleSetLabel records a user's "Was this right?" verdict (correct/incorrect)
+// on a run. shared reflects the user's opt-in to anonymous telemetry sharing.
+func (s *Server) handleSetLabel(req Request, writeResp func(Response)) {
+	var p struct {
+		RunID   string `json:"run_id"`
+		Label   string `json:"label"` // "correct" | "incorrect"
+		Shared  bool   `json:"shared"`
+		Session string `json:"session"` // optional dedup key
+	}
+	_ = json.Unmarshal(req.Params, &p)
+	if p.RunID == "" || (p.Label != "correct" && p.Label != "incorrect") {
+		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INVALID", Message: "run_id and label (correct|incorrect) required"}})
+		return
+	}
+	// Respect the telemetry.share_by_default config if the caller didn't specify.
+	shared := p.Shared || s.deps.Config.Telemetry.ShareByDefault
+	if err := s.deps.Store.SetRunLabel(p.RunID, p.Label, shared, p.Session); err != nil {
+		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INTERNAL", Message: err.Error()}})
+		return
+	}
+	result, _ := json.Marshal(map[string]any{"ok": true, "shared": shared})
+	writeResp(Response{ID: req.ID, Result: result})
+}
+
+// handleAddMissedClaim records a user-reported false negative (the agent lied
+// about something Snitch missed). Claim/actual text stays local; only metadata
+// is ever shared via telemetry.
+func (s *Server) handleAddMissedClaim(req Request, writeResp func(Response)) {
+	var p struct {
+		RunID   string `json:"run_id"`
+		Claimed string `json:"claimed"`
+		Actual  string `json:"actual"`
+		Shared  bool   `json:"shared"`
+	}
+	_ = json.Unmarshal(req.Params, &p)
+	if p.Claimed == "" || p.Actual == "" {
+		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INVALID", Message: "claimed and actual required"}})
+		return
+	}
+	shared := p.Shared || s.deps.Config.Telemetry.ShareByDefault
+	if err := s.deps.Store.AddMissedClaim(p.RunID, p.Claimed, p.Actual, shared); err != nil {
+		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INTERNAL", Message: err.Error()}})
+		return
+	}
+	result, _ := json.Marshal(map[string]any{"ok": true, "shared": shared})
 	writeResp(Response{ID: req.ID, Result: result})
 }
 

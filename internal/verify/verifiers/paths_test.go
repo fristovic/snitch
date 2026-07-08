@@ -17,6 +17,9 @@ func TestLooksLikePath(t *testing.T) {
 		{"internal/foo.go", true},
 		{"created a", false},
 		{"commands", false},
+		// Dotted code symbols are not file paths.
+		{"Registry.ShellResolver", false},
+		{"config.PlatformsConfig", false},
 	}
 	for _, tt := range tests {
 		if got := LooksLikePath(tt.in); got != tt.want {

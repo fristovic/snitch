@@ -26,7 +26,7 @@ func MergedToolCalls(p capture.RunPayload) ([]transcript.ToolCall, error) {
 	return append(effective, sub...), nil
 }
 
-func baseVerifyContext(payload capture.RunPayload) verifiers.VerifyContext {
+func baseVerifyContext(payload capture.RunPayload, shell transcript.ShellOutputResolver) verifiers.VerifyContext {
 	effective, _ := MergedToolCalls(payload)
 	execText, recapText := segmentProse(payload.AssistantText)
 	endHEAD := payload.EndHEAD
@@ -34,26 +34,28 @@ func baseVerifyContext(payload capture.RunPayload) verifiers.VerifyContext {
 		endHEAD = verifiers.GitHEADAt(payload.ProjectPath)
 	}
 	return verifiers.VerifyContext{
-		Output:             payload.Output,
-		Cwd:                payload.ProjectPath,
-		ProjectPath:        payload.ProjectPath,
-		StartHEAD:          payload.StartHEAD,
-		EndHEAD:            endHEAD,
-		FileManifest:       payload.FileManifest,
-		TranscriptPath:     payload.TranscriptPath,
-		ObservedAt:         payload.FinishedAt,
-		StartedAt:          payload.StartedAt,
-		FinishedAt:         payload.FinishedAt,
-		ToolCalls:          payload.ToolCalls,
-		EffectiveToolCalls: effective,
-		ExecutionText:      execText,
-		RecapText:          recapText,
-		AssistantText:      payload.AssistantText,
+		Output:              payload.Output,
+		Cwd:                 payload.ProjectPath,
+		ProjectPath:         payload.ProjectPath,
+		Harness:             payload.Harness,
+		StartHEAD:           payload.StartHEAD,
+		EndHEAD:             endHEAD,
+		FileManifest:        payload.FileManifest,
+		TranscriptPath:      payload.TranscriptPath,
+		ObservedAt:          payload.FinishedAt,
+		StartedAt:           payload.StartedAt,
+		FinishedAt:          payload.FinishedAt,
+		ToolCalls:           payload.ToolCalls,
+		EffectiveToolCalls:  effective,
+		ExecutionText:       execText,
+		RecapText:           recapText,
+		AssistantText:       payload.AssistantText,
+		ShellOutputResolver: shell,
 	}
 }
 
 // BuildVerifyContext assembles enriched verification context for a run.
-func BuildVerifyContext(store *record.Store, payload capture.RunPayload) (verifiers.VerifyContext, error) {
+func BuildVerifyContext(store *record.Store, payload capture.RunPayload, shell transcript.ShellOutputResolver) (verifiers.VerifyContext, error) {
 	effective, err := MergedToolCalls(payload)
 	if err != nil {
 		slog.Debug("subagent tool calls unavailable", "err", err)
@@ -74,7 +76,7 @@ func BuildVerifyContext(store *record.Store, payload capture.RunPayload) (verifi
 		}
 	}
 
-	vctx := baseVerifyContext(payload)
+	vctx := baseVerifyContext(payload, shell)
 	vctx.EffectiveToolCalls = effective
 	vctx.PriorTurns = priorTurns
 	return vctx, nil

@@ -10,7 +10,7 @@ import (
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := config.Default()
-	if !cfg.Cursor.Enabled {
+	if !cfg.Platforms.Cursor.Enabled {
 		t.Fatal("cursor watcher should be enabled by default")
 	}
 	if cfg.Display.TUI.MaxRunsVisible != 100 {

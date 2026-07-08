@@ -55,6 +55,7 @@ type VerifyContext struct {
 	Output             string
 	Cwd                string
 	ProjectPath        string
+	Harness            string
 	StartHEAD          string
 	EndHEAD            string
 	FileManifest       map[string]string
@@ -68,6 +69,9 @@ type VerifyContext struct {
 	ExecutionText      string
 	RecapText          string
 	AssistantText      string
+	// ShellOutputResolver resolves shell output from harness-specific
+	// artifacts (Cursor terminal files). nil means inline tool results only.
+	ShellOutputResolver transcript.ShellOutputResolver
 }
 
 // AllToolCalls returns merged current-turn tool calls including subagent evidence.
@@ -95,7 +99,9 @@ type Verifier interface {
 	Verify(claim Claim, ctx VerifyContext) (Result, error)
 }
 
-// ToolCallToClaim maps a Cursor tool call to a verifiable claim.
+// ToolCallToClaim maps a tool call (already normalized to canonical names by
+// the harness parser) to a verifiable claim. Tool names are canonical
+// regardless of which harness produced them.
 func ToolCallToClaim(tc transcript.ToolCall) (Claim, bool) {
 	switch tc.Name {
 	case "Write", "StrReplace", "Delete", "Read", "Glob", "Shell", "Task":
@@ -123,16 +129,4 @@ func rawToMap(in map[string]json.RawMessage) map[string]any {
 		}
 	}
 	return out
-}
-
-// IsActionClaim reports whether a claim type implies the agent took action.
-func IsActionClaim(t ClaimType) bool {
-	switch t {
-	case ClaimTestPass, ClaimCommitted, ClaimPushed,
-		ClaimFileCreated, ClaimFileModified, ClaimFileDeleted,
-		ClaimCommandRan, ClaimCommandSucceeded, ClaimStub:
-		return true
-	default:
-		return false
-	}
 }

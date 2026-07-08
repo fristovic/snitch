@@ -117,14 +117,7 @@ func SessionHasZeroEvidence(ctx VerifyContext, claimType ClaimType) bool {
 
 // GitHEADAt returns current HEAD for project.
 func GitHEADAt(cwd string) string {
-	if cwd == "" {
-		return ""
-	}
-	out, err := exec.Command("git", "-C", cwd, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return transcript.GitHEAD(cwd)
 }
 
 func hasNewCommit(cwd, startHEAD string) bool {

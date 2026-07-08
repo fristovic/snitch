@@ -134,7 +134,7 @@ func runOneTurn(store *record.Store, deviceID string, sc StressCase, projectDir 
 	}
 
 	bus := newTestBus()
-	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	engine.VerifyPayload(payload)
 
 	run, err := store.GetRunByID(runID)
@@ -186,9 +186,9 @@ func strReplace(path, old, newStr string) transcript.ToolCall {
 		Name:   "StrReplace",
 		Target: path,
 		Input: map[string]json.RawMessage{
-			"path":        mustRaw(path),
-			"old_string":  mustRaw(old),
-			"new_string":  mustRaw(newStr),
+			"path":       mustRaw(path),
+			"old_string": mustRaw(old),
+			"new_string": mustRaw(newStr),
 		},
 	}
 }

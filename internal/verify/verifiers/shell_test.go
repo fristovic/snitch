@@ -15,8 +15,8 @@ func TestShellVerifierSyntaxOnly(t *testing.T) {
 	v := verifiers.NewShellVerifier(config.ShellVerifierConfig{})
 	res, err := v.Verify(verifiers.Claim{
 		Type: "Shell", Source: "tool",
-		Target:   "go test ./...",
-		Input:    map[string]any{"command": "go test ./..."},
+		Target: "go test ./...",
+		Input:  map[string]any{"command": "go test ./..."},
 	}, verifiers.VerifyContext{Cwd: "/tmp"})
 	if err != nil {
 		t.Fatal(err)

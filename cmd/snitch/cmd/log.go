@@ -12,22 +12,32 @@ import (
 )
 
 var (
-	logRunID string
-	logTrace bool
-	logJSON  bool
+	logRunID   string
+	logTrace   bool
+	logJSON    bool
+	logHarness string
+	logLimit   int
 )
 
 var logCmd = &cobra.Command{
 	Use:   "log",
 	Short: "Show detailed verification for one agent run",
-	Long:  "Prints the full verification breakdown for a single run. Use snitch dashboard to browse history.",
+	Long: `Prints the full verification breakdown for a single run (--run), or lists
+recent runs filtered by harness (--harness). Use snitch dashboard to browse history.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if logRunID == "" && logHarness == "" {
+			return fmt.Errorf("either --run or --harness is required")
+		}
 		client, err := ipc.Connect(resolveSocket())
 		if err != nil {
 			daemonNotRunning()
 			return nil
 		}
 		defer client.Close()
+
+		if logRunID == "" {
+			return printRunList(client, logHarness, logLimit)
+		}
 
 		if logJSON {
 			data, err := client.Call("get_run", map[string]string{"id": logRunID})
@@ -47,6 +57,29 @@ var logCmd = &cobra.Command{
 		}
 		return printRunDetail(client, logRunID)
 	},
+}
+
+// printRunList shows recent runs for one harness (playbook 1.10: --harness filter).
+func printRunList(client *ipc.Client, harness string, limit int) error {
+	if limit <= 0 {
+		limit = 20
+	}
+	data, err := client.Call("get_runs", map[string]any{"harness": harness, "limit": limit})
+	if err != nil {
+		return err
+	}
+	var runs []record.Run
+	if err := json.Unmarshal(data, &runs); err != nil {
+		return err
+	}
+	if len(runs) == 0 {
+		fmt.Printf("no runs for harness %q\n", harness)
+		return nil
+	}
+	for _, r := range runs {
+		fmt.Printf("%s  %-6s  %s  %s\n", r.ID[:8], r.Verdict, r.CreatedAt.Format("2006-01-02 15:04"), truncateLog(formatPrompt(r.Command), 70))
+	}
+	return nil
 }
 
 func printRunDetail(client *ipc.Client, runID string) error {
@@ -136,8 +169,9 @@ func formatPrompt(s string) string {
 }
 
 func init() {
-	logCmd.Flags().StringVar(&logRunID, "run", "", "Run ID to show (required)")
+	logCmd.Flags().StringVar(&logRunID, "run", "", "Run ID to show")
 	logCmd.Flags().BoolVar(&logTrace, "trace", false, "Show verification pipeline trace")
 	logCmd.Flags().BoolVar(&logJSON, "json", false, "Output run and claims as JSON")
-	_ = logCmd.MarkFlagRequired("run")
+	logCmd.Flags().StringVar(&logHarness, "harness", "", "List recent runs for one harness (cursor|claude|codex|pi|opencode)")
+	logCmd.Flags().IntVar(&logLimit, "limit", 20, "Max runs to list with --harness")
 }

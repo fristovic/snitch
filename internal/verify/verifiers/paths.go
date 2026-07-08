@@ -40,7 +40,12 @@ func LooksLikePath(target string) bool {
 	if strings.Contains(target, ".") {
 		base := filepath.Base(target)
 		if idx := strings.LastIndex(base, "."); idx > 0 && idx < len(base)-1 {
-			return true
+			// Dotted identifiers like Registry.ShellResolver or pkg.Func are
+			// code symbols, not files: real extensions are short and lowercase.
+			ext := base[idx+1:]
+			if len(ext) <= 10 && ext == strings.ToLower(ext) {
+				return true
+			}
 		}
 	}
 	if knownBasenames[lower] {

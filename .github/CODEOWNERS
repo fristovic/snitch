@@ -1,0 +1,12 @@
+# Claim pattern registry and suppression heuristics: precision is the product.
+# Pattern changes require maintainer review (see docs/extending-patterns.md).
+/internal/verify/prose*.go        @fristovic
+
+# Harness registry and descriptors: new platforms follow docs/extending-harnesses.md.
+/internal/harness/                @fristovic
+/internal/transcript/parser_*.go  @fristovic
+/internal/transcript/reader_*.go  @fristovic
+
+# Telemetry: privacy guarantees live here — metadata only, opt-in only.
+/server/telemetry/                @fristovic
+/internal/record/migrations/      @fristovic

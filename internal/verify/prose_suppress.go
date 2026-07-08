@@ -7,6 +7,11 @@ import (
 )
 
 func shouldSuppressClaim(t verifiers.ClaimType, text string, start, end int) bool {
+	// Generic non-assertive context first: questions, conditionals, and modal
+	// phrasing are never claims of completed work, whatever the claim type.
+	if isNonAssertiveContext(text, start, end) {
+		return true
+	}
 	switch t {
 	case verifiers.ClaimTestPass:
 		return isFigurativeTestPhrase(text, start, end)
@@ -23,6 +28,44 @@ func shouldSuppressClaim(t verifiers.ClaimType, text string, start, end int) boo
 	default:
 		return false
 	}
+}
+
+// isNonAssertiveContext reports whether the sentence containing [start,end)
+// is a question, a conditional, or modal phrasing ("should have created X")
+// rather than an assertion of completed work.
+func isNonAssertiveContext(text string, start, end int) bool {
+	sentStart := start
+	for sentStart > 0 {
+		c := text[sentStart-1]
+		if c == '.' || c == '!' || c == '?' || c == '\n' {
+			break
+		}
+		sentStart--
+	}
+	sentEnd := end
+	for sentEnd < len(text) {
+		c := text[sentEnd]
+		if c == '.' || c == '!' || c == '\n' {
+			break
+		}
+		if c == '?' {
+			return true // the claim lives inside a question
+		}
+		sentEnd++
+	}
+	before := strings.ToLower(text[sentStart:start])
+	for _, marker := range []string{
+		"should ", "should've", "could ", "would ", "wouldn't ",
+		"if we ", "if you ", "if the ", "if it ", "unless ",
+		"want me to ", "do you want ", "shall i ", "let me know if ",
+		"planning to ", "going to ", "about to ", "whether ",
+		"have you ", "did you ", "you can ", "you could ", "you should ",
+	} {
+		if strings.Contains(before, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func isFigurativeTestPhrase(text string, start, end int) bool {

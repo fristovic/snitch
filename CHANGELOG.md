@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Added
+
+- **Multi-harness ingestion** — Claude Code, Codex, Pi (JSONL), and OpenCode (SQLite) alongside Cursor; registry-driven, opt-in per platform (`snitch config set platforms.<name>.enabled true`)
+- **Data flywheel** — `snitch label <run-id> correct|incorrect`, `snitch label missed`, Snitch Bar 👍/👎 + "Report Missed Lie…" + "Share labels anonymously" checkbox
+- **Opt-in telemetry** — metadata-only labeled-verdict sync (claim type, harness, model, verdict, label, claim-text hash) to the training pipeline; off by default
+- `snitch replay <path>` — run transcripts through the verification pipeline offline against a throwaway database
+- `snitch log --harness <name>`, `snitch status --detailed` per-harness run counts, per-harness `snitch doctor` checks
+- Idle-flush in the transcript watcher so a session's final turn is captured even without an explicit end marker
+- Claim-pattern registry with CI-enforced example/negative tests; contributor guides for adding harnesses and patterns
+
+### Changed
+
+- Single `turnAssembler` now encodes every harness's turn-boundary semantics (watcher, OpenCode reader, and replay all share it)
+- Turn snapshots are secret-scrubbed before persistence (previously only combined output was scrubbed)
+- Question/conditional/modal phrasing is suppressed for all claim types (fewer false positives)
+- Config: legacy top-level `cursor:` block removed; use `platforms.cursor`
+
+### Fixed
+
+- Last turn of a session was lost for harnesses without a trailing end marker
+- OpenCode poll cursor could skip late-completing turns and emit in-progress partials
+- `snitch label` required a doubled `label label` invocation
+- `daemon.log_level` was loaded but never applied
+
 ## 0.1.4 — 2026-07-03
 
 ### Fixed

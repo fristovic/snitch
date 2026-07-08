@@ -37,4 +37,3 @@ func ToggleLabel(s MenuState) string {
 	}
 	return "Stop Snitching"
 }
-

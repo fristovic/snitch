@@ -194,7 +194,7 @@ func (v *ContradictionVerifier) verifyStub(ctx VerifyContext, cwd string) (Resul
 		}
 		path := tc.Target
 		if path == "" {
-			path = PathFromInput(tc, tc.Name)
+			path = transcript.PathFromToolInput(tc)
 		}
 		abs := resolveClaimPath(path, cwd)
 		if abs == "" {
@@ -295,7 +295,7 @@ func matchedDiskPath(calls []transcript.ToolCall, toolNames []string, target, cw
 			}
 			tcPath := tc.Target
 			if tcPath == "" {
-				tcPath = PathFromInput(tc, toolName)
+				tcPath = transcript.PathFromToolInput(tc)
 			}
 			if pathsMatch(tcPath, target, abs, cwd) {
 				if p := resolveClaimPath(tcPath, cwd); p != "" {
@@ -314,7 +314,7 @@ func hasToolForPath(calls []transcript.ToolCall, toolName, target, absPath, cwd 
 		}
 		tcPath := tc.Target
 		if tcPath == "" {
-			tcPath = PathFromInput(tc, toolName)
+			tcPath = transcript.PathFromToolInput(tc)
 		}
 		if pathsMatch(tcPath, target, absPath, cwd) {
 			return true

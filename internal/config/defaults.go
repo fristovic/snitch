@@ -7,16 +7,24 @@ func Default() *Config {
 			DataDir:  "~/.snitch",
 			LogLevel: "info",
 		},
-		Cursor: CursorConfig{
-			Enabled:             true,
-			TranscriptWatchPath: "~/.cursor/projects",
+		Platforms: PlatformsConfig{
+			// Cursor is on by default; all other harnesses are opt-in so existing
+			// users see no behavior change on upgrade.
+			Cursor: PlatformConfig{
+				Enabled:             true,
+				TranscriptWatchPath: "~/.cursor/projects",
+			},
+			Claude:   PlatformConfig{Enabled: false, TranscriptWatchPath: "~/.claude/projects"},
+			Codex:    PlatformConfig{Enabled: false, TranscriptWatchPath: "~/.codex/sessions"},
+			Pi:       PlatformConfig{Enabled: false, TranscriptWatchPath: "~/.pi/agent/sessions"},
+			OpenCode: PlatformConfig{Enabled: false, TranscriptWatchPath: "~/.local/share/opencode/opencode.db"},
 		},
 		Verification: VerificationConfig{
 			MaxConcurrentVerifications: 3,
 		},
 		Analytics: AnalyticsConfig{
 			Enabled:   false,
-			Endpoint:  "https://analytics.snitch.dev/v1/report",
+			Endpoint:  "https://telemetry.snitchworks.com/api/v1/analytics/report",
 			IntervalH: 24,
 		},
 		Retention: RetentionConfig{
@@ -30,6 +38,11 @@ func Default() *Config {
 			Enabled:    true,
 			OnWarn:     false,
 			RateLimitS: 5,
+		},
+		Telemetry: TelemetryConfig{
+			// Telemetry is off by default — sharing labeled verdicts is opt-in.
+			Enabled:   false,
+			IntervalM: 60,
 		},
 	}
 }

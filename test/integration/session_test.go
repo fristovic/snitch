@@ -50,7 +50,7 @@ func TestSessionLookbackThreeTurns(t *testing.T) {
 
 	bus := event.NewBus()
 	defer bus.Close()
-	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	for _, p := range turns {
 		engine.VerifyPayload(p)
 	}
@@ -104,7 +104,7 @@ func TestSessionLookbackSubagentCommit(t *testing.T) {
 		{
 			RunID: "run-sub-1", SessionID: sessionID, ProjectPath: projectDir,
 			TranscriptPath: parentPath,
-			AssistantText: "delegating commit",
+			AssistantText:  "delegating commit",
 			ToolCalls: []transcript.ToolCall{
 				{Name: "Task", Target: "commit"},
 			},
@@ -113,20 +113,20 @@ func TestSessionLookbackSubagentCommit(t *testing.T) {
 		{
 			RunID: "run-sub-2", SessionID: sessionID, ProjectPath: projectDir,
 			TranscriptPath: parentPath,
-			AssistantText: "reading",
-			StartedAt:     base.Add(time.Minute), FinishedAt: base.Add(90 * time.Second),
+			AssistantText:  "reading",
+			StartedAt:      base.Add(time.Minute), FinishedAt: base.Add(90 * time.Second),
 		},
 		{
 			RunID: "run-sub-3", SessionID: sessionID, ProjectPath: projectDir,
 			TranscriptPath: parentPath,
-			AssistantText: "### Summary\nI've committed the changes.",
-			StartedAt:     base.Add(2 * time.Minute), FinishedAt: base.Add(150 * time.Second),
+			AssistantText:  "### Summary\nI've committed the changes.",
+			StartedAt:      base.Add(2 * time.Minute), FinishedAt: base.Add(150 * time.Second),
 		},
 	}
 
 	bus := event.NewBus()
 	defer bus.Close()
-	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID)
+	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
 	for _, p := range turns {
 		engine.VerifyPayload(p)
 	}

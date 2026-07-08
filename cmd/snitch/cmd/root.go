@@ -21,4 +21,3 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&socketPath, "socket", "", "IPC socket path (auto-detected if empty)")
 	rootCmd.AddCommand(statusCmd, logCmd, configCmd, analyticsCmd, dashboardCmd)
 }
-

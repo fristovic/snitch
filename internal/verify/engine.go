@@ -9,7 +9,9 @@ import (
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/record"
+	"github.com/fristovic/snitch/internal/scrub"
 	"github.com/fristovic/snitch/internal/severity"
+	"github.com/fristovic/snitch/internal/transcript"
 	"github.com/fristovic/snitch/internal/verify/verifiers"
 )
 
@@ -17,17 +19,19 @@ var reGenericActionProse = regexp.MustCompile(`(?i)\b(?:i\s+)?(?:modified|update
 
 // Engine runs the lie-detection verification pipeline.
 type Engine struct {
-	bus        *event.Bus
-	store      *record.Store
-	cfg        config.VerificationConfig
-	verifiers  []verifiers.Verifier
-	deviceID   string
-	sem        chan struct{}
-	onVerified func(event.RunVerifiedPayload)
+	bus           *event.Bus
+	store         *record.Store
+	cfg           config.VerificationConfig
+	verifiers     []verifiers.Verifier
+	deviceID      string
+	sem           chan struct{}
+	onVerified    func(event.RunVerifiedPayload)
+	shellResolver func(harness string) transcript.ShellOutputResolver
 }
 
-// NewEngine creates a verification engine.
-func NewEngine(bus *event.Bus, store *record.Store, cfg config.VerificationConfig, deviceID string) *Engine {
+// NewEngine creates a verification engine. shellResolver looks up the
+// per-harness shell-output resolver from the harness registry.
+func NewEngine(bus *event.Bus, store *record.Store, cfg config.VerificationConfig, deviceID string, shellResolver func(harness string) transcript.ShellOutputResolver) *Engine {
 	maxConc := cfg.MaxConcurrentVerifications
 	if maxConc <= 0 {
 		maxConc = 3
@@ -43,14 +47,30 @@ func NewEngine(bus *event.Bus, store *record.Store, cfg config.VerificationConfi
 			verifiers.NewShellVerifier(cfg.ShellVerifier),
 			&verifiers.SubagentVerifier{},
 		},
-		deviceID: deviceID,
-		sem:      make(chan struct{}, maxConc),
+		deviceID:      deviceID,
+		sem:           make(chan struct{}, maxConc),
+		shellResolver: shellResolver,
 	}
 }
 
 // OnVerified registers a callback invoked after each verified run.
 func (e *Engine) OnVerified(fn func(event.RunVerifiedPayload)) {
 	e.onVerified = fn
+}
+
+// shellLookup returns the ShellOutputResolver for a run's harness. An empty
+// or unknown harness resolves to nil (inline tool results only) — warn so a
+// misconfigured producer is visible rather than silently degrading.
+func (e *Engine) shellLookup(p capture.RunPayload) transcript.ShellOutputResolver {
+	if e.shellResolver == nil {
+		return nil
+	}
+	r := e.shellResolver(p.Harness)
+	if r == nil {
+		slog.Warn("no shell resolver for harness; inline tool results only",
+			"harness", p.Harness, "run_id", p.RunID)
+	}
+	return r
 }
 
 // Start listens for RunCaptured events.
@@ -111,6 +131,7 @@ func (e *Engine) process(ev event.Event) {
 		ProjectPath:    payload.ProjectPath,
 		Command:        payload.Command,
 		Harness:        payload.Harness,
+		Model:          payload.Model,
 		OutputHash:     hash,
 		DeviceID:       e.deviceID,
 		DurationMS:     payload.FinishedAt.Sub(payload.StartedAt).Milliseconds(),
@@ -122,10 +143,10 @@ func (e *Engine) process(ev event.Event) {
 		return
 	}
 
-	vctx, err := BuildVerifyContext(e.store, payload)
+	vctx, err := BuildVerifyContext(e.store, payload, e.shellLookup(payload))
 	if err != nil {
 		slog.Warn("build verify context failed", "err", err)
-		vctx = baseVerifyContext(payload)
+		vctx = baseVerifyContext(payload, e.shellLookup(payload))
 	}
 
 	claims := e.buildClaims(payload, vctx)
@@ -199,7 +220,7 @@ func (e *Engine) process(ev event.Event) {
 	if endHEAD == "" {
 		endHEAD = vctx.EndHEAD
 	}
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, _ := json.Marshal(scrubPayload(payload))
 	if err := e.store.SaveTurnSnapshot(payload.RunID, payloadBytes, payload.StartHEAD, endHEAD, payload.FileManifest); err != nil {
 		slog.Warn("save turn snapshot failed", "err", err)
 	}
@@ -234,12 +255,47 @@ func (e *Engine) buildClaims(payload capture.RunPayload, vctx verifiers.VerifyCo
 	return claims
 }
 
+// scrubPayload redacts secrets from every free-text field of a run payload
+// before it is persisted as a turn snapshot. Output is already scrubbed by
+// capture; user/assistant text, command, and tool call payloads are not.
+func scrubPayload(p capture.RunPayload) capture.RunPayload {
+	p.UserText = scrub.Scrub(p.UserText)
+	p.AssistantText = scrub.Scrub(p.AssistantText)
+	p.Command = scrub.Scrub(p.Command)
+	calls := make([]transcript.ToolCall, len(p.ToolCalls))
+	copy(calls, p.ToolCalls)
+	for i := range calls {
+		calls[i].Target = scrub.Scrub(calls[i].Target)
+		calls[i].Result = scrub.Scrub(calls[i].Result)
+		if calls[i].Input != nil {
+			in := make(map[string]json.RawMessage, len(calls[i].Input))
+			for k, v := range calls[i].Input {
+				in[k] = json.RawMessage(scrubJSONValue(v))
+			}
+			calls[i].Input = in
+		}
+	}
+	p.ToolCalls = calls
+	return p
+}
+
+// scrubJSONValue scrubs a raw JSON value, preserving valid JSON. String values
+// are scrubbed on their decoded form and re-encoded; other shapes pass through
+// unless their serialized form scrubs cleanly back to valid JSON.
+func scrubJSONValue(raw json.RawMessage) []byte {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		clean, _ := json.Marshal(scrub.Scrub(s))
+		return clean
+	}
+	scrubbed := scrub.Scrub(string(raw))
+	if json.Valid([]byte(scrubbed)) {
+		return []byte(scrubbed)
+	}
+	return raw
+}
+
 func (e *Engine) emitVerified(p event.RunVerifiedPayload) {
-	data, _ := json.Marshal(p)
-	e.bus.Publish(event.Event{
-		ID: p.RunID, Timestamp: capture.NowUTC(), Source: "verify",
-		Type: event.EventRunVerified, Payload: data,
-	})
 	if e.onVerified != nil {
 		e.onVerified(p)
 	}

@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
-// ProjectCwdFromTranscriptPath derives project cwd from a Cursor transcript path.
-func ProjectCwdFromTranscriptPath(path string) string {
+// slugProjectCwd finds the /projects/<slug>/ segment in path and decodes the
+// slug to an absolute cwd. Shared by the Cursor and Claude resolvers, whose
+// layouts differ only in the app directory (.cursor vs .claude).
+func slugProjectCwd(path string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")
 	for i, p := range parts {
 		if p == "projects" && i+1 < len(parts) {
@@ -17,8 +19,8 @@ func ProjectCwdFromTranscriptPath(path string) string {
 	return ""
 }
 
-// CursorProjectDirFromTranscriptPath returns ~/.cursor/projects/<slug> for a transcript.
-func CursorProjectDirFromTranscriptPath(path string) string {
+// slugProjectDir returns ~/<appDir>/projects/<slug> for a transcript path.
+func slugProjectDir(path, appDir string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")
 	for i, p := range parts {
 		if p == "projects" && i+1 < len(parts) {
@@ -26,14 +28,24 @@ func CursorProjectDirFromTranscriptPath(path string) string {
 			if err != nil {
 				return ""
 			}
-			return filepath.Join(home, ".cursor", "projects", parts[i+1])
+			return filepath.Join(home, appDir, "projects", parts[i+1])
 		}
 	}
 	return ""
 }
 
-// DecodeProjectSlug maps Cursor project slugs like Users-a-b-c to /Users/a/b/c.
+// sessionIDFromFilename returns the filename stem, optionally stripping a
+// prefix (Codex "rollout-").
+func sessionIDFromFilename(path, stripPrefix string) string {
+	base := filepath.Base(path)
+	base = strings.TrimPrefix(base, stripPrefix)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// DecodeProjectSlug maps project path slugs to absolute paths.
+// Cursor uses Users-a-b-c; Claude Code uses -Users-a-b-c (leading dash).
 func DecodeProjectSlug(slug string) string {
+	slug = strings.TrimPrefix(slug, "-")
 	if !strings.HasPrefix(slug, "Users-") {
 		return ""
 	}
@@ -44,9 +56,15 @@ func DecodeProjectSlug(slug string) string {
 	return "/" + strings.Join(segments, "/")
 }
 
-// SessionIDFromTranscriptPath returns the session UUID from a transcript file path.
-// Layout: .../agent-transcripts/<sessionUUID>/<sessionUUID>.jsonl
-func SessionIDFromTranscriptPath(path string) string {
+// CursorPathResolver resolves project/session metadata from Cursor transcript
+// paths, which follow ~/.cursor/projects/<slug>/agent-transcripts/<uuid>/...
+type CursorPathResolver struct{}
+
+func (CursorPathResolver) ProjectCwd(path string) string { return slugProjectCwd(path) }
+
+func (CursorPathResolver) ProjectDir(path string) string { return slugProjectDir(path, ".cursor") }
+
+func (CursorPathResolver) SessionID(path string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")
 	for i, p := range parts {
 		if p == "agent-transcripts" && i+1 < len(parts) {
@@ -54,9 +72,4 @@ func SessionIDFromTranscriptPath(path string) string {
 		}
 	}
 	return ""
-}
-
-// IsSubagentTranscript reports whether path is under a subagents/ directory.
-func IsSubagentTranscript(path string) bool {
-	return strings.Contains(filepath.ToSlash(path), "/subagents/")
 }

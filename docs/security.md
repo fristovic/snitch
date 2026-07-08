@@ -2,19 +2,20 @@
 
 ## Scope
 
-Snitch on macOS reads Cursor agent transcripts from `~/.cursor/projects/`, verifies prose claims locally, and stores results in `~/.snitch/`.
+Snitch on macOS reads local AI agent transcript artifacts (Cursor, Claude Code, Codex, and Pi JSONL files; OpenCode's SQLite database), verifies prose claims locally, and stores results in `~/.snitch/`.
 
 ## Data handling
 
 - **Local only** by default — SQLite at `~/.snitch/snitch.db`
-- **Scrubbing** — API keys and common secret patterns removed before storage
+- **Scrubbing** — API keys and common secret patterns removed before any command, output, or turn snapshot is stored
+- **Opt-in telemetry** — labeled-verdict metadata only (claim type, harness, model, verdict, label, SHA-256 hash of claim text); no code, paths, or claim text
 - **Opt-in analytics** — aggregated stats only; no raw prompts or assistant text
 
 ## Permissions
 
 Snitch needs read access to:
 
-- `~/.cursor/projects/**/agent-transcripts/*.jsonl`
+- The transcript locations of enabled harnesses (e.g. `~/.cursor/projects`, `~/.claude/projects`, `~/.codex/sessions`, `~/.pi/agent/sessions`, `~/.local/share/opencode/opencode.db`)
 - Project directories referenced in transcripts (for file/git checks)
 
 It does not require admin privileges or network interception.
@@ -27,6 +28,6 @@ The CLI talks to `snitchd` over a Unix domain socket (`~/.snitch/snitch.sock` by
 
 - No proxy or TLS interception
 - No cloud LLM calls for verification
-- No transmission of transcript content unless analytics is explicitly enabled
+- No transmission of transcript content, ever — the opt-in telemetry and analytics channels carry metadata only
 
 See [SECURITY.md](../SECURITY.md) for vulnerability reporting.

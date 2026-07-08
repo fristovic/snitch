@@ -2,10 +2,8 @@ package transcript
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,65 +11,63 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
-	"github.com/fristovic/snitch/internal/config"
+
 	"github.com/fristovic/snitch/internal/event"
 )
 
-// TurnCompleted is emitted when a Cursor turn ends (turn_ended line).
+// TurnCompleted is emitted when an agent turn ends. Harness names the source
+// platform ("cursor", "claude", "codex", "pi", "opencode").
 type TurnCompleted struct {
-	RunID          string     `json:"run_id"`
-	SessionID      string     `json:"session_id"`
-	TranscriptPath string     `json:"transcript_path"`
-	ProjectPath    string     `json:"project_path"`
-	StartHEAD      string     `json:"start_head,omitempty"`
-	UserText       string     `json:"user_text"`
-	AssistantText  string     `json:"assistant_text"`
-	ToolCalls      []ToolCall `json:"tool_calls"`
-	StartedAt      time.Time  `json:"started_at"`
-	FinishedAt     time.Time  `json:"finished_at"`
-	EndHEAD        string     `json:"end_head,omitempty"`
+	RunID          string            `json:"run_id"`
+	SessionID      string            `json:"session_id"`
+	TranscriptPath string            `json:"transcript_path"`
+	ProjectPath    string            `json:"project_path"`
+	Harness        string            `json:"harness,omitempty"`
+	Model          string            `json:"model,omitempty"`
+	StartHEAD      string            `json:"start_head,omitempty"`
+	UserText       string            `json:"user_text"`
+	AssistantText  string            `json:"assistant_text"`
+	ToolCalls      []ToolCall        `json:"tool_calls"`
+	StartedAt      time.Time         `json:"started_at"`
+	FinishedAt     time.Time         `json:"finished_at"`
+	EndHEAD        string            `json:"end_head,omitempty"`
 	FileManifest   map[string]string `json:"file_manifest,omitempty"`
 }
 
-// Watcher watches Cursor agent transcript JSONL files.
+// defaultIdleFlush is how long a turn buffer may sit without new writes
+// before the watcher flushes it. Pi and Codex only mark turn boundaries on
+// the NEXT user message / turn_context, so a session's final turn would
+// otherwise be lost.
+const defaultIdleFlush = 30 * time.Second
+
+// Watcher watches agent transcript JSONL files for one harness. It owns
+// fsnotify plumbing, file offsets, and goroutine lifecycle; turn-boundary
+// semantics live in turnAssembler.
 type Watcher struct {
-	bus     *event.Bus
-	cfg     config.CursorConfig
-	root    string
-	watcher *fsnotify.Watcher
-	offsets map[string]int64
-	turns   map[string]*turnBuffer
-	watched map[string]bool
-	mu      sync.Mutex
-	ctx     context.Context
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
+	bus        *event.Bus
+	cfg        WatcherConfig
+	watcher    *fsnotify.Watcher
+	offsets    map[string]int64
+	assemblers map[string]*turnAssembler
+	watched    map[string]bool
+	mu         sync.Mutex
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 }
 
-type turnBuffer struct {
-	userText      string
-	assistantText strings.Builder
-	toolCalls     []ToolCall
-	toolResults   []ToolResult
-	startedAt     time.Time
-	startHEAD     string
-	projectPath   string
-}
-
-// NewWatcher creates a Cursor transcript watcher.
-func NewWatcher(bus *event.Bus, cfg config.CursorConfig) *Watcher {
-	root := cfg.TranscriptWatchPath
-	if root == "" {
-		home, _ := os.UserHomeDir()
-		root = filepath.Join(home, ".cursor", "projects")
+// NewWatcherWith creates a harness-agnostic transcript watcher.
+// One per enabled JSONL harness; the daemon starts all of them.
+func NewWatcherWith(bus *event.Bus, cfg WatcherConfig) *Watcher {
+	if cfg.IdleFlush <= 0 {
+		cfg.IdleFlush = defaultIdleFlush
 	}
 	return &Watcher{
-		bus:     bus,
-		cfg:     cfg,
-		root:    root,
-		offsets: make(map[string]int64),
-		turns:   make(map[string]*turnBuffer),
-		watched: make(map[string]bool),
+		bus:        bus,
+		cfg:        cfg,
+		offsets:    make(map[string]int64),
+		assemblers: make(map[string]*turnAssembler),
+		watched:    make(map[string]bool),
 	}
 }
 
@@ -90,18 +86,19 @@ func (w *Watcher) Start() error {
 	}
 	w.watcher = fsw
 
-	if err := w.walkAndWatch(w.root); err != nil && !os.IsNotExist(err) {
+	if err := w.walkAndWatch(w.cfg.Root); err != nil && !os.IsNotExist(err) {
 		_ = fsw.Close()
 		return err
 	}
 
 	w.wg.Add(1)
 	go w.loop()
-	slog.Info("cursor watcher started", "root", w.root)
+	slog.Info("transcript watcher started", "harness", w.cfg.Harness, "root", w.cfg.Root)
 	return nil
 }
 
-// Stop shuts down the watcher.
+// Stop shuts down the watcher, draining any in-flight turn buffers so the
+// session's final turn is not lost.
 func (w *Watcher) Stop() error {
 	if w.cancel != nil {
 		w.cancel()
@@ -110,24 +107,26 @@ func (w *Watcher) Stop() error {
 		_ = w.watcher.Close()
 	}
 	w.wg.Wait()
+
+	w.mu.Lock()
+	pending := make(map[string]*turnBuffer)
+	for path, a := range w.assemblers {
+		if buf := a.Drain(); buf != nil {
+			pending[path] = buf
+		}
+	}
+	w.mu.Unlock()
+	for path, buf := range pending {
+		w.emitTurn(path, buf)
+	}
 	return nil
 }
 
-// Name returns the watcher identifier.
-func (w *Watcher) Name() string { return "cursor-transcript" }
-
-func gitHEAD(projectPath string) string {
-	if projectPath == "" {
-		return ""
-	}
-	out, err := exec.Command("git", "-C", projectPath, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
 func (w *Watcher) walkAndWatch(root string) error {
+	ownsDir := w.cfg.OwnsDir
+	if ownsDir == nil {
+		ownsDir = func(string) bool { return true }
+	}
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -138,7 +137,7 @@ func (w *Watcher) walkAndWatch(root string) error {
 			}
 			return nil
 		}
-		if strings.Contains(path, "agent-transcripts") || path == w.root {
+		if ownsDir(path) || path == w.cfg.Root {
 			return w.watchDir(path)
 		}
 		return nil
@@ -168,7 +167,10 @@ func (w *Watcher) watchDir(dir string) error {
 }
 
 func (w *Watcher) owns(path string) bool {
-	return strings.Contains(path, "agent-transcripts") && strings.HasSuffix(path, ".jsonl")
+	if w.cfg.OwnsFile != nil {
+		return w.cfg.OwnsFile(path)
+	}
+	return strings.HasSuffix(path, ".jsonl")
 }
 
 func (w *Watcher) seedOffsetEOF(path string) {
@@ -183,10 +185,14 @@ func (w *Watcher) seedOffsetEOF(path string) {
 
 func (w *Watcher) loop() {
 	defer w.wg.Done()
+	idle := time.NewTicker(w.cfg.IdleFlush / 2)
+	defer idle.Stop()
 	for {
 		select {
 		case <-w.ctx.Done():
 			return
+		case <-idle.C:
+			w.flushIdle()
 		case ev, ok := <-w.watcher.Events:
 			if !ok {
 				return
@@ -198,6 +204,24 @@ func (w *Watcher) loop() {
 			}
 			slog.Debug("fsnotify error", "err", err)
 		}
+	}
+}
+
+// flushIdle emits any turn buffer that has not received writes recently.
+// This covers harnesses (Pi, Codex) whose final turn has no explicit end
+// marker until the next user message, which never arrives at session end.
+func (w *Watcher) flushIdle() {
+	cutoff := time.Now().Add(-w.cfg.IdleFlush)
+	w.mu.Lock()
+	pending := make(map[string]*turnBuffer)
+	for path, a := range w.assemblers {
+		if buf := a.Idle(cutoff); buf != nil {
+			pending[path] = buf
+		}
+	}
+	w.mu.Unlock()
+	for path, buf := range pending {
+		w.emitTurn(path, buf)
 	}
 }
 
@@ -223,108 +247,52 @@ func (w *Watcher) ingest(path string) {
 	off := w.offsets[path]
 	w.mu.Unlock()
 
-	lines, newOff, err := ParseLines(path, off)
+	lines, newOff, err := ParseLinesWith(w.cfg.Parser, path, off)
 	if err != nil {
 		slog.Debug("parse transcript failed", "path", path, "err", err)
 		return
 	}
 	w.mu.Lock()
 	w.offsets[path] = newOff
-	w.mu.Unlock()
-
+	a := w.assemblers[path]
+	if a == nil {
+		a = newTurnAssembler(w.cfg.Resolver, path)
+		w.assemblers[path] = a
+	}
+	var completed []*turnBuffer
 	for _, line := range lines {
-		w.handleLine(path, line)
+		if buf := a.Feed(line); buf != nil {
+			completed = append(completed, buf)
+		}
+	}
+	w.mu.Unlock()
+
+	for _, buf := range completed {
+		w.emitTurn(path, buf)
 	}
 }
 
-func (w *Watcher) handleLine(path string, line ParsedLine) {
-	if line.TurnEnded {
-		w.finishTurn(path)
-		return
-	}
-	w.mu.Lock()
-	buf := w.turns[path]
-	if buf == nil {
-		projectPath := ProjectCwdFromTranscriptPath(path)
-		buf = &turnBuffer{
-			startedAt:   time.Now(),
-			startHEAD:   gitHEAD(projectPath),
-			projectPath: projectPath,
-		}
-		w.turns[path] = buf
-	}
-	switch line.Role {
-	case "user":
-		if buf.userText == "" {
-			buf.userText = line.Text
-		} else if line.Text != "" {
-			buf.userText += "\n" + line.Text
-		}
-	case "assistant":
-		if line.Text != "" {
-			if buf.assistantText.Len() > 0 {
-				buf.assistantText.WriteString("\n")
-			}
-			buf.assistantText.WriteString(line.Text)
-		}
-		buf.toolCalls = append(buf.toolCalls, line.ToolCalls...)
-		buf.toolResults = append(buf.toolResults, line.ToolResults...)
-	default:
-		buf.toolResults = append(buf.toolResults, line.ToolResults...)
-	}
-	w.mu.Unlock()
-}
-
-func (w *Watcher) finishTurn(path string) {
-	w.mu.Lock()
-	buf := w.turns[path]
-	delete(w.turns, path)
-	w.mu.Unlock()
-	if buf == nil {
-		return
-	}
-	if buf.userText == "" && buf.assistantText.Len() == 0 && len(buf.toolCalls) == 0 {
-		return
-	}
-
-	finishedAt := time.Now()
-	runID := uuid.NewString()
-	sessionID := SessionIDFromTranscriptPath(path)
+// emitTurn converts a completed buffer into a TurnCompleted event.
+func (w *Watcher) emitTurn(path string, buf *turnBuffer) {
 	projectPath := buf.projectPath
 	if projectPath == "" {
-		projectPath = ProjectCwdFromTranscriptPath(path)
+		projectPath = w.cfg.Resolver.ProjectCwd(path)
 	}
-
-	payload := TurnCompleted{
-		RunID:          runID,
-		SessionID:      sessionID,
+	toolCalls := AttachToolResults(buf.toolCalls, buf.toolResults)
+	PublishTurnCompleted(w.bus, TurnCompleted{
+		RunID:          uuid.NewString(),
+		SessionID:      w.cfg.Resolver.SessionID(path),
 		TranscriptPath: path,
 		ProjectPath:    projectPath,
+		Harness:        w.cfg.Harness,
+		Model:          buf.model,
 		StartHEAD:      buf.startHEAD,
 		UserText:       buf.userText,
 		AssistantText:  buf.assistantText.String(),
-		ToolCalls:      AttachToolResults(buf.toolCalls, buf.toolResults),
+		ToolCalls:      toolCalls,
 		StartedAt:      buf.startedAt,
-		FinishedAt:     finishedAt,
-		EndHEAD:        gitHEAD(projectPath),
-		FileManifest:   BuildFileManifest(projectPath, AttachToolResults(buf.toolCalls, buf.toolResults)),
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		slog.Warn("marshal TurnCompleted", "err", err)
-		return
-	}
-	w.bus.Publish(event.Event{
-		ID:        runID,
-		Timestamp: finishedAt,
-		Source:    "transcript",
-		Type:      event.EventTurnCompleted,
-		Payload:   data,
+		FinishedAt:     time.Now(),
+		EndHEAD:        GitHEAD(projectPath),
+		FileManifest:   BuildFileManifest(projectPath, toolCalls),
 	})
-	slog.Info("turn completed",
-		"run_id", runID,
-		"session_id", sessionID,
-		"project", projectPath,
-		"tool_calls", len(buf.toolCalls),
-	)
 }

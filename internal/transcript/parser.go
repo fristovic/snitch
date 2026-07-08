@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"time"
 )
 
-// ToolCall is a parsed Cursor tool_use block.
+// ToolCall is a parsed tool_use block, normalized to Snitch's canonical tool
+// vocabulary (Shell, Write, StrReplace, ...). Each harness parser maps its raw
+// tool names to these canonical names at ingestion.
 type ToolCall struct {
 	ToolUseID string                     `json:"tool_use_id,omitempty"`
 	Name      string                     `json:"name"`
@@ -31,13 +34,23 @@ type ParsedLine struct {
 	ToolCalls   []ToolCall
 	ToolResults []ToolResult
 	TurnEnded   bool
-	TurnStatus  string
+	// Cwd carries harness-specific working directory hints (e.g. Codex
+	// session_meta, Claude per-event cwd) when the path resolver cannot
+	// derive the project path.
+	Cwd string
+	// Model is the underlying LLM identifier when the harness exposes it on
+	// assistant messages (Pi today). Empty for harnesses that don't.
+	Model string
+	// Timestamp is the event time when the source records one (OpenCode DB
+	// rows today). Zero means "now" — live watchers stamp wall-clock time.
+	Timestamp time.Time
 }
 
 type contentBlock struct {
 	Type      string          `json:"type"`
 	ID        string          `json:"id"`
 	Text      string          `json:"text"`
+	Thinking  string          `json:"thinking"`
 	Name      string          `json:"name"`
 	Input     json.RawMessage `json:"input"`
 	ToolUseID string          `json:"tool_use_id"`
@@ -50,12 +63,13 @@ type cursorMessage struct {
 	Message struct {
 		Content []contentBlock `json:"content"`
 	} `json:"message"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
+	Type string `json:"type"`
 }
 
-// ParseLines reads new JSONL content from path starting at fromOffset.
-func ParseLines(path string, fromOffset int64) (lines []ParsedLine, newOffset int64, err error) {
+// ParseLinesWith reads new JSONL content from path starting at fromOffset,
+// decoding each line through p. The offset/seek/scanner mechanics are shared
+// across all JSONL harnesses; only the per-line decode is harness-specific.
+func ParseLinesWith(p TranscriptParser, path string, fromOffset int64) (lines []ParsedLine, newOffset int64, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fromOffset, err
@@ -73,7 +87,7 @@ func ParseLines(path string, fromOffset int64) (lines []ParsedLine, newOffset in
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		parsed, ok := parseLine(line)
+		parsed, ok := p.ParseLine(line)
 		if !ok {
 			continue
 		}
@@ -82,13 +96,24 @@ func ParseLines(path string, fromOffset int64) (lines []ParsedLine, newOffset in
 	return lines, off, scanner.Err()
 }
 
-func parseLine(line string) (ParsedLine, bool) {
+// CursorParser decodes Cursor's transcript JSONL format.
+type CursorParser struct{}
+
+// Harness returns the cursor harness identifier.
+func (CursorParser) Harness() string { return "cursor" }
+
+// ParseLine decodes one Cursor JSONL record into a normalized ParsedLine.
+func (CursorParser) ParseLine(line string) (ParsedLine, bool) {
+	return parseCursorLine(line)
+}
+
+func parseCursorLine(line string) (ParsedLine, bool) {
 	var row cursorMessage
 	if err := json.Unmarshal([]byte(line), &row); err != nil {
 		return ParsedLine{}, false
 	}
 	if row.Type == "turn_ended" {
-		return ParsedLine{TurnEnded: true, TurnStatus: row.Status}, true
+		return ParsedLine{TurnEnded: true}, true
 	}
 	if row.Role == "" {
 		return ParsedLine{}, false
@@ -197,18 +222,13 @@ func AttachToolResults(calls []ToolCall, results []ToolResult) []ToolCall {
 	return out
 }
 
-// InputString returns a string field from tool input.
-func InputString(tc ToolCall, key string) string {
-	if tc.Input == nil {
-		return ""
+// appendTextBlock joins non-empty text blocks with newlines.
+func appendTextBlock(dst, block string) string {
+	if block == "" {
+		return dst
 	}
-	raw, ok := tc.Input[key]
-	if !ok {
-		return ""
+	if dst != "" {
+		dst += "\n"
 	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return ""
-	}
-	return s
+	return dst + block
 }

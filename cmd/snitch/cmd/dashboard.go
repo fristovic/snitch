@@ -23,25 +23,29 @@ const (
 	modeLies
 )
 
+// dashboardHarness filters the dashboard to one harness when set via --harness.
+var dashboardHarness string
+
 type filterState struct {
-	Verdict     string // "", "snitched", "all"
-	ClaimType   string
-	Project     string
-	Search      string
-	ShowPasses  bool
+	Verdict    string // "", "snitched", "all"
+	ClaimType  string
+	Project    string
+	Search     string
+	ShowPasses bool
+	Harness    string // "", or a harness name (cursor/claude/codex/pi/opencode)
 }
 
 type dashboardModel struct {
-	client      *ipc.Client
-	cfg         config.TUIConfig
-	status      record.DaemonStatus
-	runs        []record.Run
-	lies        []record.LieClaim
-	claims      map[string][]record.Claim
-	filter      filterState
-	mode        viewMode
-	cursor      int
-	width       int
+	client *ipc.Client
+	cfg    config.TUIConfig
+	status record.DaemonStatus
+	runs   []record.Run
+	lies   []record.LieClaim
+	claims map[string][]record.Claim
+	filter filterState
+	mode   viewMode
+	cursor int
+	width  int
 	height int
 	err    error
 }
@@ -106,6 +110,9 @@ func (m *dashboardModel) refresh() error {
 	}
 	if m.filter.Search != "" {
 		params["search"] = m.filter.Search
+	}
+	if m.filter.Harness != "" {
+		params["harness"] = m.filter.Harness
 	}
 	data, err := m.client.Call("get_runs", params)
 	if err != nil {
@@ -391,7 +398,7 @@ var dashboardCmd = &cobra.Command{
 		m := dashboardModel{
 			client: client,
 			cfg:    tuiCfg,
-			filter: filterState{Verdict: "snitched"},
+			filter: filterState{Verdict: "snitched", Harness: dashboardHarness},
 		}
 
 		p := tea.NewProgram(m, tea.WithAltScreen())
@@ -399,4 +406,8 @@ var dashboardCmd = &cobra.Command{
 		client.Close()
 		return err
 	},
+}
+
+func init() {
+	dashboardCmd.Flags().StringVar(&dashboardHarness, "harness", "", "Filter to one harness (cursor, claude, codex, pi, opencode)")
 }

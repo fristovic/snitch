@@ -2,11 +2,16 @@
   <img src="docs/snitch_logo.png" alt="Snitch logo" width="320">
 </p>
 
-<p align="center"><strong>Catch the model lying in prose.</strong></p>
+<p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>
+
+<p align="center"><a href="https://snitchworks.com">snitchworks.com</a> · <a href="#install">Install</a> · <a href="#help-train-snitch-data-flywheel">Help train Snitch</a> · <a href="#roadmap">Roadmap</a></p>
+
+<!-- TODO(launch): demo GIF here — Snitch catching a live Claude Code lie -->
+
 
 <p align="center">
   <span style="display: inline-block; max-width: 720px; text-align: justify;">
-    Snitch is a deterministic <a href="https://cursor.com">Cursor</a> prose lie detector daemon for macOS. It watches agent transcripts, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
+    Snitch is a deterministic prose lie detector for AI coding agents. It watches transcripts from <a href="https://cursor.com">Cursor</a>, <a href="https://claude.com/claude-code">Claude Code</a>, <a href="https://github.com/openai/codex">Codex</a>, <a href="https://pi.dev">Pi</a>, and <a href="https://opencode.ai">OpenCode</a>, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
   </span>
 </p>
 
@@ -125,15 +130,19 @@ snitch dashboard
 | Command | Description |
 | ------- | ----------- |
 | `snitch start` | Open Snitch Bar |
-| `snitch status` | Detection status (`--detailed` for stats) |
+| `snitch status` | Detection status (`--detailed` for per-harness stats) |
 | `snitch log --run <id>` | Full verification detail for one run (`--trace`, `--json`) |
-| `snitch dashboard` | Interactive TUI for runs and lies |
-| `snitch doctor` | Debug install checklist |
+| `snitch log --harness <name>` | List recent runs for one agent platform |
+| `snitch dashboard` | Interactive TUI for runs and lies (`--harness` filter) |
+| `snitch replay <path>` | Run any transcript through the pipeline offline — measure accuracy on your own sessions |
+| `snitch label <run-id> correct\|incorrect` | Mark a verdict right or wrong (`--share` to help train Snitch) |
+| `snitch label missed --claimed "..." --actual "..."` | Report a lie Snitch missed |
+| `snitch doctor` | Debug install checklist (per-harness) |
 | `snitch uninstall` | Remove daemon and binaries (`--purge` for data) |
 | `snitch config` | View/set configuration |
 
 
-Snitch runs passively after install — it reads `~/.cursor/projects/**/agent-transcripts/*.jsonl`.
+Snitch runs passively after install — it reads each enabled agent's local transcripts (see [Supported agents](#supported-agents)); Cursor's `~/.cursor/projects` is watched by default.
 
 ### Notifications
 
@@ -154,6 +163,7 @@ The first notification triggers the macOS permission prompt.
 | Type                 | Example prose              | Contradiction                                      |
 | -------------------- | -------------------------- | -------------------------------------------------- |
 | `test_pass`          | "all tests pass"           | No test run, or test output shows failure          |
+| `command_ran`        | "I ran the command"        | No shell tool call in the turn                     |
 | `command_succeeded`  | "command ran successfully" | Shell exited with error                            |
 | `committed`          | "I committed"              | No new commit since turn start                     |
 | `pushed`             | "I pushed"                 | No `git push` shell call                           |
@@ -181,10 +191,50 @@ Snitch persists each turn's full payload (tool calls, git HEAD, file manifest) i
 
 Recap segments (`### Summary`, `## Summary`, horizontal rules) are tagged separately: inaccurate recap claims cap at WARN unless there is zero evidence across the current turn plus lookback.
 
+## Supported agents
+
+Snitch watches transcripts from five AI coding agents. Cursor is enabled by default; the others are opt-in.
+
+| Agent | Format | Location | Enable |
+| ----- | ------ | -------- | ------ |
+| **Cursor** | JSONL | `~/.cursor/projects` | on by default |
+| **Claude Code** | JSONL | `~/.claude/projects` | `snitch config set platforms.claude.enabled true` |
+| **Codex** | JSONL | `~/.codex/sessions` | `snitch config set platforms.codex.enabled true` |
+| **Pi** | JSONL | `~/.pi/agent/sessions` | `snitch config set platforms.pi.enabled true` |
+| **OpenCode** | SQLite | `~/.local/share/opencode/opencode.db` | `snitch config set platforms.opencode.enabled true` |
+
+After enabling a platform, restart Snitch (`snitch start`). Each platform's claims, tool calls, and shell output are normalized to a common internal vocabulary, so the verification pipeline works identically across all five.
+
+The dashboard accepts a `--harness` filter to scope to one agent: `snitch dashboard --harness claude`.
+
+## Help train Snitch (data flywheel)
+
+When Snitch catches a lie, the Snitch Bar menu and CLI let you mark the verdict **👍 correct** or **👎 incorrect**. These labels train a future semantic verifier.
+
+- **Snitch Bar:** 👍 / 👎 items under the latest lie, plus a persistent **Share labels anonymously** checkbox
+- **CLI:** `snitch label <run-id> correct --share` / `incorrect`
+- **Missed a lie?** `snitch label missed --claimed "what the agent said" --actual "what happened"` — false negatives are the most valuable training data of all
+
+Labels are stored locally. Sharing is **off by default** and requires two opt-ins: mark labels as shareable (the Bar checkbox / `--share` / `telemetry.share_by_default`), and enable the sync channel:
+
+```bash
+snitch config set telemetry.enabled true
+```
+
+When enabled, only claim metadata (type, harness, model, verdict, your label, and a SHA-256 hash of the claim text for dedup) is shared — **no code, file paths, claim text, or shell output ever leaves your machine.** Opt-in analytics reporting (`analytics.enabled`, also off by default) is a separate outbound channel that carries aggregate metadata only.
+
+Community accuracy tracking ("how often do coding agents actually lie?") is coming as labeled data accumulates.
+
+## Roadmap
+
+- **v1 (this release):** Multi-harness ingestion (Cursor + Claude Code + Codex + Pi + OpenCode), harness-agnostic shell output, data labeling + opt-in telemetry flywheel.
+- **v2:** A locally-run false-positive classifier trained on v1 labels — reduces alert noise by filtering regex hits that aren't genuine claims. `snitch model pull` distributes the free model.
+- **v3 (Snitchworks):** A paid team layer — centralized dashboard, policy engine, premium semantic claim extraction.
+
 ## Limitations
 
-- Deterministic regex extraction only (no LLM claim parsing)
-- Lookback is limited to the current Cursor session (3 turns), not cross-session history
+- Deterministic regex extraction only (no LLM claim parsing) — semantic extraction is a v2/v3 goal
+- Lookback is limited to the current agent session (3 turns), not cross-session history
 - Subagent tool calls are merged by **time window**, not `tool_use_id` mapping
 - Consistency checks remain same-turn only
 - File manifests hash paths touched by tool calls at turn end; out-of-band disk changes may be missed

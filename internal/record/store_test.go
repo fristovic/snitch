@@ -249,13 +249,13 @@ func TestGetClaimsFilter(t *testing.T) {
 	}
 }
 
-func TestGetRunsByProject(t *testing.T) {
+func TestGetRunsByProjectFilter(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := Open(dir)
 	defer store.Close()
 	_ = store.InsertRun(Run{ID: "r1", ProjectPath: "/a", Verdict: VerdictPass, DeviceID: "d"})
 	_ = store.InsertRun(Run{ID: "r2", ProjectPath: "/b", Verdict: VerdictPass, DeviceID: "d"})
-	runs, err := store.GetRunsByProject("/a", 10)
+	runs, err := store.GetRuns(RunFilter{ProjectPath: "/a", Limit: 10})
 	if err != nil || len(runs) != 1 || runs[0].ID != "r1" {
 		t.Fatalf("unexpected runs: %+v err %v", runs, err)
 	}

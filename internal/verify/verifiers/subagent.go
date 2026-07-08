@@ -85,7 +85,7 @@ func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	}
 
 	r.Accurate = true
-	r.GroundTruth = transcript.SessionIDFromTranscriptPath(ctx.TranscriptPath) + ": " +
+	r.GroundTruth = transcript.CursorPathResolver{}.SessionID(ctx.TranscriptPath) + ": " +
 		formatSize(int64(nonEmpty)) + " subagent transcript(s)"
 	return r, nil
 }

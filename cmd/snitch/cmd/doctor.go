@@ -8,7 +8,6 @@ import (
 
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/ipc"
-	"github.com/fristovic/snitch/internal/platform"
 	"github.com/fristovic/snitch/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +16,7 @@ var uninstallPurge bool
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Check Snitch + Cursor install health",
+	Short: "Check Snitch install health and harness configuration",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ok := true
 		printCheck := func(name string, pass bool, detail string) {
@@ -55,13 +54,22 @@ var doctorCmd = &cobra.Command{
 		cursorData := fileExists(filepath.Join(os.Getenv("HOME"), ".cursor"))
 		printCheck("Cursor installed", cursorApp || cursorData, "app or ~/.cursor")
 
-		paths, _ := platform.Resolve()
-		cfg, _ := config.Load(paths.ConfigPath)
-		watch := cfg.Cursor.TranscriptWatchPath
-		if watch == "" {
-			watch = filepath.Join(os.Getenv("HOME"), ".cursor", "projects")
+		// Per-harness checks: every enabled platform must have an existing
+		// watch path (or DB file for OpenCode). Disabled platforms are
+		// reported but never fail the doctor.
+		cfg, _, err := config.LoadFromPlatform()
+		if err != nil {
+			printCheck("config", false, err.Error())
+		} else {
+			for _, name := range config.HarnessNames() {
+				pc, _ := cfg.Platforms.ForHarness(name)
+				if !pc.Enabled {
+					fmt.Printf("[--] harness %s — disabled\n", name)
+					continue
+				}
+				printCheck("harness "+name, fileExists(pc.TranscriptWatchPath), pc.TranscriptWatchPath)
+			}
 		}
-		printCheck("transcript watch path", fileExists(watch), watch)
 
 		if !ok {
 			fmt.Println("\nSome checks failed. Run: snitch start")
