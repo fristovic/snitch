@@ -1,6 +1,7 @@
 # Contributing to Snitch
 
 Thank you for contributing. Read [ARCHITECTURE.md](ARCHITECTURE.md) before opening a PR.
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Development
 

@@ -1,0 +1,57 @@
+name: Claim pattern
+description: Propose a new prose claim type or improve an existing regex
+title: "pattern: "
+labels: ["enhancement", "patterns"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Patterns must be **high precision**. Read
+        [docs/extending-patterns.md](https://github.com/fristovic/snitch/blob/main/docs/extending-patterns.md)
+        before filing. A PR with registry examples + negatives is preferred over
+        an issue-only request.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Request type
+      options:
+        - New claim type
+        - Improve existing pattern (catch more true lies)
+        - Tighten existing pattern (reduce false positives)
+    validations:
+      required: true
+  - type: input
+    id: claim_type
+    attributes:
+      label: Claim type name
+      description: Existing type (e.g. test_pass) or proposed name
+      placeholder: e.g. test_pass / package_installed
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Positive example sentences (≥3)
+      description: Prose that should produce a claim
+      placeholder: |
+        All tests pass after the refactor.
+        I've committed the fix.
+    validations:
+      required: true
+  - type: textarea
+    id: negatives
+    attributes:
+      label: Negative example sentences (≥2)
+      description: Similar wording that must NOT produce a claim
+      placeholder: |
+        Do the tests pass on your machine?
+        The team is committed to quality.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How should Snitch verify this?
+      description: What evidence (tool calls, git, filesystem, shell output) proves or disproves the claim?
+    validations:
+      required: true

@@ -1,0 +1,56 @@
+name: New harness
+description: Request or discuss support for another AI coding agent
+title: "harness: "
+labels: ["enhancement", "harness"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Full guide:
+        [docs/extending-harnesses.md](https://github.com/fristovic/snitch/blob/main/docs/extending-harnesses.md).
+        Never guess wire formats — verify against real on-device session files.
+  - type: input
+    id: agent
+    attributes:
+      label: Agent / product name
+      placeholder: e.g. Aider, Windsurf, Continue
+    validations:
+      required: true
+  - type: input
+    id: transcript_path
+    attributes:
+      label: Default transcript / session path
+      placeholder: e.g. ~/.some-agent/sessions
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Session format (best guess)
+      options:
+        - JSONL (one event per line)
+        - SQLite
+        - Other / unknown
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Docs or source links
+      description: Official docs, schema, or GitHub paths that define the session format
+    validations:
+      required: true
+  - type: checkboxes
+    id: verified
+    attributes:
+      label: Verification
+      options:
+        - label: I have inspected real session files on disk (not just docs)
+          required: false
+        - label: I am willing to contribute a parser + fixture PR
+          required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Turn boundaries / tool naming notes
+      description: How does a turn end? What are Write/Shell/etc. called in this agent?

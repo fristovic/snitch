@@ -71,7 +71,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/fristovic/snitch"
-    description: "Catch Cursor agent lies in prose — local lie detector"
+    description: "Deterministic prose lie detector for AI coding agents (Cursor, Claude Code, Codex, Pi, OpenCode)"
     license: "MIT"
     install: |
       bin.install "snitch"

@@ -246,6 +246,7 @@ Community accuracy tracking ("how often do coding agents actually lie?") is comi
 - [User guide](docs/user-guide.md)
 - [Architecture](ARCHITECTURE.md)
 - [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security](SECURITY.md)
 
 
@@ -253,3 +254,5 @@ Community accuracy tracking ("how often do coding agents actually lie?") is comi
 ## License
 
 MIT
+
+By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

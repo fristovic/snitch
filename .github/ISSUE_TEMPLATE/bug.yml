@@ -1,0 +1,70 @@
+name: Bug report
+description: Something Snitch got wrong, crashed, or failed to install/run
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Precision matters here — include enough
+        detail to reproduce without pasting secrets or full transcripts.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Detection (false positive / false negative)
+        - Menu bar / Snitch Bar
+        - Daemon (snitchd)
+        - CLI / dashboard
+        - Install / Homebrew / LaunchAgent
+        - Harness / transcript parsing
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Agent harness (if relevant)
+      options:
+        - Cursor
+        - Claude Code
+        - Codex
+        - Pi
+        - OpenCode
+        - N/A
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Snitch version
+      description: Output of `snitch status` or `snitch --version`
+      placeholder: e.g. 0.1.4
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Prefer a minimal prose quote + what tools/git/fs showed. Do not paste secrets, API keys, or full session logs.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: snitch doctor (optional)
+      description: Paste relevant FAIL/WARN lines only.
+      render: text
