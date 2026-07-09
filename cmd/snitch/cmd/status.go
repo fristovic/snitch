@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fristovic/snitch/internal/claims"
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/record"
@@ -15,7 +16,7 @@ var statusDetailed bool
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show lie detection status",
+	Short: "Show claim verification status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sock := ipc.ResolveSocket(socketPath)
 		client, err := ipc.Connect(sock)
@@ -72,13 +73,13 @@ var statusCmd = &cobra.Command{
 				fmt.Printf("  %s: %d\n", h, n)
 			}
 		}
-		if st.TopLieType != "" {
-			fmt.Printf("top lie type: %s\n", st.TopLieType)
+		if st.MostCommonFalseClaimType != "" {
+			fmt.Printf("most common false claim: %s (%s)\n", claims.ClaimTypeLabel(st.MostCommonFalseClaimType), st.MostCommonFalseClaimType)
 		}
-		if len(st.LieStats.ByClaimType) > 0 {
-			fmt.Println("lies by type:")
-			for t, n := range st.LieStats.ByClaimType {
-				fmt.Printf("  %s: %d\n", t, n)
+		if len(st.ClaimStats.ByClaimType) > 0 {
+			fmt.Println("false claims by type:")
+			for t, n := range st.ClaimStats.ByClaimType {
+				fmt.Printf("  %s (%s): %d\n", claims.ClaimTypeLabel(t), t, n)
 			}
 		}
 
@@ -98,5 +99,5 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
-	statusCmd.Flags().BoolVar(&statusDetailed, "detailed", false, "Show lie statistics and recent failures")
+	statusCmd.Flags().BoolVar(&statusDetailed, "detailed", false, "Show claim statistics and recent failures")
 }

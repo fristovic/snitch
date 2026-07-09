@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0 — 2026-07-09
+
+Claim-first UX, clearer findings, and modern macOS notifications. Homebrew/curl upgrades replace CLI + daemon + Snitch Bar together.
+
+### Added
+
+- `internal/claims` display helpers (`FromRecord`, Flagged/Checked, shared arrow format)
+- `internal/shellpreview` for compact shell one-liners in UI
+- Nested `top_claim` on `run.completed` (includes `source` / `target`)
+- IPC `get_latest_top_claim` for menu preview
+- SQLite migration `009` + telemetry `0003` normalize tool claim types to `tool_*`
+- `no_action` / consistency claims attach real flagged prose (`claim_sentence` / `claim_context`)
+
+### Changed
+
+- Product language: “lie” → “claim” / “false claim” in UI, CLI, and IPC
+- Status field: `most_common_false_claim_type` (preferred) alongside legacy `top_claim_type`
+- Snitch Bar notifications use `UNUserNotificationCenter` (auth + foreground banners)
+- Tool claim types are `tool_*` snake_case end-to-end
+
+### Fixed
+
+- Notification title/body race on async main-queue deliver
+- Menu “latest claim” no longer depends on changing global `GetClaims` ordering
+
+### Compatibility (upgrade-safe)
+
+- `--lies-only` still works (hidden alias of `--false-claims-only`)
+- IPC still accepts `lies_only` on `get_claims`
+- `run.completed` still emits flat `top_claim_*` fields alongside nested `top_claim`
+- Status still includes `top_claim_type` alongside `most_common_false_claim_type`
+
+
 ## 0.3.2 — 2026-07-09
 
 Flywheel training-payload plumbing for a future opt-in classifier, with the labeling UI still gated off for public builds.

@@ -8,7 +8,7 @@ import (
 
 func BenchmarkFileVerifier(b *testing.B) {
 	v := &verifiers.FileVerifier{}
-	claim := verifiers.Claim{Type: "Read", Source: "tool", Target: "/etc/hosts"}
+	claim := verifiers.Claim{Type: verifiers.ClaimToolRead, Source: "tool", Target: "/etc/hosts"}
 	ctx := verifiers.VerifyContext{Cwd: "/"}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

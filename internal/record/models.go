@@ -86,8 +86,8 @@ type Claim struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// LieClaim is a claim joined with run context for querying.
-type LieClaim struct {
+// ClaimWithRun is a claim joined with run context for querying.
+type ClaimWithRun struct {
 	Claim
 	ProjectPath string    `json:"project_path"`
 	SessionID   string    `json:"session_id"`
@@ -109,38 +109,45 @@ type RunFilter struct {
 	Offset       int
 }
 
-// ClaimFilter filters lie/claim queries.
+// ClaimFilter filters claim queries.
 type ClaimFilter struct {
-	ClaimType   string
-	ProjectPath string
-	SessionID   string
-	MinSeverity int
-	LiesOnly    bool
-	Since       time.Time
-	Search      string
-	Limit       int
-	Offset      int
+	ClaimType       string
+	ProjectPath     string
+	SessionID       string
+	MinSeverity     int
+	FalseClaimsOnly bool
+	Since           time.Time
+	Search          string
+	Limit           int
+	Offset          int
 }
 
-// LieStats summarizes caught lies.
-type LieStats struct {
+// ClaimStats summarizes flagged false claims.
+type ClaimStats struct {
 	TotalRuns    int            `json:"total_runs"`
 	SnitchedRuns int            `json:"snitched_runs"`
 	ByClaimType  map[string]int `json:"by_claim_type"`
-	TopClaimType string         `json:"top_claim_type,omitempty"`
+	// MostCommonFalseClaimType is the false-claim type with the highest count
+	// (severity >= 2). Not the same as a per-run top claim.
+	MostCommonFalseClaimType string `json:"most_common_false_claim_type,omitempty"`
+	// TopClaimType is a ≤0.3.x alias of MostCommonFalseClaimType.
+	TopClaimType string `json:"top_claim_type,omitempty"`
 }
 
 // DaemonStatus is returned by IPC status method.
 type DaemonStatus struct {
-	Running         bool     `json:"running"`
-	UptimeSeconds   int64    `json:"uptime_seconds"`
-	Version         string   `json:"version"`
-	TotalRuns       int      `json:"total_runs"`
-	SnitchedRuns    int      `json:"snitched_runs"`
-	TopLieType      string   `json:"top_lie_type,omitempty"`
-	ProjectsWatched int      `json:"projects_watched"`
-	SessionsSeen    int      `json:"sessions_seen"`
-	LieStats        LieStats `json:"lie_stats"`
+	Running         bool       `json:"running"`
+	UptimeSeconds   int64      `json:"uptime_seconds"`
+	Version         string     `json:"version"`
+	TotalRuns       int        `json:"total_runs"`
+	SnitchedRuns    int        `json:"snitched_runs"`
+	// MostCommonFalseClaimType mirrors ClaimStats (convenience for status CLI).
+	MostCommonFalseClaimType string `json:"most_common_false_claim_type,omitempty"`
+	// TopClaimType is a ≤0.3.x alias of MostCommonFalseClaimType.
+	TopClaimType    string     `json:"top_claim_type,omitempty"`
+	ProjectsWatched int        `json:"projects_watched"`
+	SessionsSeen    int        `json:"sessions_seen"`
+	ClaimStats      ClaimStats `json:"claim_stats"`
 	// RunsByHarness maps harness name → run count, for per-platform status.
 	RunsByHarness map[string]int `json:"runs_by_harness,omitempty"`
 }

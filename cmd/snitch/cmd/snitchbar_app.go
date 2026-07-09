@@ -18,7 +18,7 @@ func openSnitchBar() error {
 	if err := exec.Command("open", app).Run(); err != nil {
 		return fmt.Errorf("open Snitch Bar: %w", err)
 	}
-	fmt.Println("Opened Snitch Bar — choose Start Snitching in the menu bar to detect lies.")
+	fmt.Println("Opened Snitch Bar — choose Start Snitching in the menu bar to verify claims.")
 	return nil
 }
 

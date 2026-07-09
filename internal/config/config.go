@@ -82,7 +82,7 @@ type TelemetryConfig struct {
 	IntervalM      int    `yaml:"interval_m" json:"interval_m"`
 	ShareByDefault bool   `yaml:"share_by_default" json:"share_by_default"`
 	// ConsentShown tracks whether the one-time telemetry consent prompt has
-	// been displayed (Snitch Bar shows it on the first detected lie).
+	// been displayed (Snitch Bar shows it on the first flagged claim).
 	ConsentShown bool `yaml:"consent_shown" json:"consent_shown"`
 }
 

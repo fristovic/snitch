@@ -209,11 +209,11 @@ print_next_steps() {
 
 Snitch is installed.
 
-Snitch Bar manages the lie detector — it opens from your menu bar at login (or open it manually).
+Snitch Bar manages the claim verifier — it opens from your menu bar at login (or open it manually).
 Use **Start Snitching** / **Stop Snitching** in the menu to pause or resume.
 
   snitch status           # daemon health (when Snitching...)
-  snitch dashboard        # browse runs and lies interactively
+  snitch dashboard        # browse runs and flagged claims interactively
 
 Advanced:
   snitch log --run <id>   # full verification detail for one run

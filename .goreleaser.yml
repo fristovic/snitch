@@ -71,7 +71,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/fristovic/snitch"
-    description: "Deterministic prose lie detector for AI coding agents (Cursor, Claude Code, Codex, Pi, OpenCode)"
+    description: "Deterministic prose claim verifier for AI coding agents (Cursor, Claude Code, Codex, Pi, OpenCode)"
     license: "MIT"
     install: |
       bin.install "snitch"
@@ -111,7 +111,7 @@ brews:
         system "launchctl", "bootstrap", "gui/#{Process.uid}", plist_dest rescue system("launchctl", "load", plist_dest)
       end
     caveats: |
-      Snitch Bar manages lie detection automatically.
+      Snitch Bar manages claim verification automatically.
       After install:
         snitch start
       Use Start Snitching / Stop Snitching in the menu bar to pause or resume.

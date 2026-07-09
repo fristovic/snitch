@@ -1,4 +1,4 @@
-// Package stress provides table-driven lie-detector stress tests.
+// Package stress provides table-driven claim-verifier stress tests.
 package stress
 
 import (
@@ -23,10 +23,10 @@ const (
 	CategoryTrueNegative  Category = "true_negative"
 )
 
-// StressCase is one prose + tool-call scenario with expected lie outcome.
+// StressCase is one prose + tool-call scenario with expected flagged-claim outcome.
 type StressCase struct {
 	Name            string
-	LieType         string
+	ClaimType       string
 	Category        Category
 	AssistantText   string
 	ToolCalls       []transcript.ToolCall
@@ -34,7 +34,7 @@ type StressCase struct {
 	StartHEAD       string
 	EndHEAD         string
 	SessionID       string
-	ExpectLie       bool
+	ExpectFlagged   bool
 	ExpectClaimType string
 	Notes           string
 }
@@ -43,8 +43,8 @@ type StressCase struct {
 type CaseResult struct {
 	Verdict    record.Verdict
 	Claims     []record.Claim
-	MatchedLie bool
-	LieClaim   *record.Claim
+	MatchedFlagged bool
+	MatchedClaim   *record.Claim
 }
 
 // RunCase executes verification and returns observed outcomes.
@@ -152,7 +152,7 @@ func runOneTurn(store *record.Store, deviceID string, sc StressCase, projectDir 
 	}
 	claimType := sc.ExpectClaimType
 	if claimType == "" {
-		claimType = sc.LieType
+		claimType = sc.ClaimType
 	}
 	for i := range claims {
 		c := &claims[i]
@@ -160,9 +160,9 @@ func runOneTurn(store *record.Store, deviceID string, sc StressCase, projectDir 
 			continue
 		}
 		if c.Verified < 0 && c.Severity >= 2 {
-			res.MatchedLie = true
+			res.MatchedFlagged = true
 			cp := *c
-			res.LieClaim = &cp
+			res.MatchedClaim = &cp
 			break
 		}
 	}

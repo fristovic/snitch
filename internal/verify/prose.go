@@ -313,10 +313,7 @@ func HasLocalActionProse(claims []verifiers.Claim) bool {
 		if c.Source != "prose" {
 			continue
 		}
-		switch c.Type {
-		case verifiers.ClaimCommitted, verifiers.ClaimPushed,
-			verifiers.ClaimFileCreated, verifiers.ClaimFileModified, verifiers.ClaimFileDeleted,
-			verifiers.ClaimCommandRan, verifiers.ClaimCommandSucceeded, verifiers.ClaimStub:
+		if verifiers.IsLocalActionType(c.Type) {
 			return true
 		}
 	}

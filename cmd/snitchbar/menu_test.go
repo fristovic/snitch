@@ -37,23 +37,23 @@ func TestToggleLabel(t *testing.T) {
 	}
 }
 
-func TestLatestLiePreview(t *testing.T) {
-	if got := LatestLiePreview(nil); got != "No lies yet" {
+func TestLatestClaimPreview(t *testing.T) {
+	if got := LatestClaimPreview(nil); got != "No flagged claims yet" {
 		t.Fatalf("got %q", got)
 	}
-	got := LatestLiePreview(&record.LieClaim{
+	got := LatestClaimPreview(&record.ClaimWithRun{
 		Claim: record.Claim{ClaimType: "test_pass", Claimed: "All tests pass."},
 	})
-	if got != `Latest: test_pass — "All tests pass."` {
+	if got != `Latest: Tests passed — "All tests pass."` {
 		t.Fatalf("got %q", got)
 	}
-	long := LatestLiePreview(&record.LieClaim{
+	long := LatestClaimPreview(&record.ClaimWithRun{
 		Claim: record.Claim{
 			ClaimType: "committed",
 			Claimed:   "I committed the changes to the repository after fixing everything carefully",
 		},
 	})
-	if !strings.HasPrefix(long, "Latest: committed — \"") {
+	if !strings.HasPrefix(long, "Latest: Git commit — \"") {
 		t.Fatalf("got %q", long)
 	}
 	if !strings.Contains(long, "…") {

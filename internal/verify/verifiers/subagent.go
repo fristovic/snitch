@@ -15,7 +15,7 @@ type SubagentVerifier struct{}
 func (v *SubagentVerifier) Name() string { return "subagent" }
 
 func (v *SubagentVerifier) CanHandle(c Claim) bool {
-	return c.Source == "tool" && c.Type == "Task"
+	return c.Source == "tool" && c.Type == ClaimToolTask
 }
 
 func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {

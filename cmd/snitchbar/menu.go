@@ -1,20 +1,17 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/fristovic/snitch/internal/claims"
 	"github.com/fristovic/snitch/internal/record"
-	"github.com/fristovic/snitch/internal/textutil"
 )
 
 // MenuState drives the systray dropdown labels.
 type MenuState struct {
-	Connected bool
-	Paused    bool
-	Starting  bool
-	Alert     bool
-	Lie       *record.LieClaim
+	Connected   bool
+	Paused      bool
+	Starting    bool
+	Alert       bool
+	LatestClaim *record.ClaimWithRun
 }
 
 // StatusLabel is the non-clickable status row at the top of the menu.
@@ -42,16 +39,10 @@ func ToggleLabel(s MenuState) string {
 	return "Stop Snitching"
 }
 
-// LatestLiePreview is a disabled context row for the latest caught lie.
-// Empty string means "No lies yet".
-func LatestLiePreview(lie *record.LieClaim) string {
-	if lie == nil {
-		return "No lies yet"
+// LatestClaimPreview is a disabled context row for the latest flagged claim.
+func LatestClaimPreview(c *record.ClaimWithRun) string {
+	if c == nil {
+		return "No flagged claims yet"
 	}
-	claimed := strings.Join(strings.Fields(lie.Claimed), " ")
-	claimed = textutil.TruncateRunes(claimed, 42)
-	if claimed == "" {
-		claimed = lie.ClaimType
-	}
-	return fmt.Sprintf("Latest: %s — %q", lie.ClaimType, claimed)
+	return "Latest: " + claims.ShortSummary(claims.FromRecord(c.Claim), 42)
 }
