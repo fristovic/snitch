@@ -6,9 +6,6 @@
 
 <p align="center"><a href="https://snitchworks.com">snitchworks.com</a> · <a href="#install">Install</a> · <a href="#help-train-snitch-data-flywheel">Help train Snitch</a> · <a href="#roadmap">Roadmap</a></p>
 
-<!-- TODO(launch): demo GIF here — Snitch catching a live Claude Code lie -->
-
-
 <p align="center">
   <span style="display: inline-block; max-width: 720px; text-align: justify;">
     Snitch is a deterministic prose lie detector for AI coding agents. It watches transcripts from <a href="https://cursor.com">Cursor</a>, <a href="https://claude.com/claude-code">Claude Code</a>, <a href="https://github.com/openai/codex">Codex</a>, <a href="https://pi.dev">Pi</a>, and <a href="https://opencode.ai">OpenCode</a>, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
@@ -76,12 +73,14 @@ From the Snitch menu:
 | ------ | ------------ |
 | **Snitching…** / **Paused** / **Offline** | Current detection status |
 | **Start Snitching** / **Stop Snitching** | Turn lie detection on or off |
-| **Show Last Lie** | Open Terminal with full details for the most recent lie (`snitch log --run <id>`) |
-| **Open Dashboard…** | Open Terminal with the interactive TUI (`snitch dashboard`) |
+| **Latest: …** | Preview of the most recent lie (claim type + short quote) |
+| **View Details…** | Open Terminal with full details (`snitch log --run <id>`) |
+| **Mark Correct** / **Mark Incorrect** | Label that lie to help train Snitch |
+| **History ▸** | Open Dashboard…, Report Missed Lie…, Share labels anonymously |
 | **Preferences…** | Open `~/.snitch/config.yaml` |
 | **Quit Snitch Bar** | Stop the daemon and exit |
 
-When the model lies, the menu bar icon alerts and macOS may show a notification. Click **Show Last Lie** for the full verification breakdown, or **Open Dashboard…** to browse history.
+When the model lies, the menu bar icon alerts and Snitch Bar may show a Notification Center alert (Snitch app icon). Click **View Details…** for the full verification breakdown, or **History ▸ Open Dashboard…** to browse history.
 
 ### Terminal (optional)
 
@@ -103,7 +102,7 @@ Snitch stores every agent **turn** as a **run** (with a verdict and claims). A *
 | **`snitch log --run <id>`** | One agent turn | Full breakdown — verdict, prompt, tool calls, every claim with evidence. |
 | **`snitch dashboard`** | Browsing history | Interactive TUI — flip between runs and lies, filter, search, live refresh. |
 
-**Menu bar shortcuts:** **Show Last Lie** runs `snitch log --run <id>` for the latest lie. **Open Dashboard…** runs `snitch dashboard`.
+**Menu bar shortcuts:** **View Details…** runs `snitch log --run <id>` for the latest lie. **History ▸ Open Dashboard…** runs `snitch dashboard`.
 
 ```bash
 snitch log --run abc12345
@@ -120,8 +119,12 @@ snitch dashboard
 | ---- | ----------- |
 | **Start / Stop Snitching** | Pause or resume lie detection |
 | Alert icon | Flashes when a new lie is caught |
-| **Show Last Lie** | Open `snitch log --run <id>` for the latest lie |
-| **Open Dashboard…** | Open `snitch dashboard` in Terminal |
+| **Latest: …** | Disabled preview of the most recent lie |
+| **View Details…** | Open `snitch log --run <id>` for the latest lie |
+| **Mark Correct** / **Mark Incorrect** | Label the latest lie |
+| **History ▸ Open Dashboard…** | Open `snitch dashboard` in Terminal |
+| **History ▸ Report Missed Lie…** | Report a false negative |
+| **History ▸ Share labels anonymously** | Opt in to share label metadata |
 | **Preferences…** | Edit `~/.snitch/config.yaml` |
 | **Quit Snitch Bar** | Stop `snitchd` and exit |
 
@@ -146,7 +149,7 @@ Snitch runs passively after install — it reads each enabled agent's local tran
 
 ### Notifications
 
-When `snitchd` catches a lie, macOS Notification Center can alert you (enabled by default). Configure in `~/.snitch/config.yaml`:
+When Snitch Bar receives a failed (or optionally warned) run, it posts a macOS Notification Center alert attributed to **Snitch Bar.app** (Snitch head icon). Configure in `~/.snitch/config.yaml`:
 
 ```yaml
 notifications:
@@ -155,7 +158,7 @@ notifications:
   rate_limit_s: 5
 ```
 
-The first notification triggers the macOS permission prompt.
+The first notification triggers the macOS permission prompt for Snitch Bar.
 
 ## Lie types
 
@@ -209,11 +212,11 @@ The dashboard accepts a `--harness` filter to scope to one agent: `snitch dashbo
 
 ## Help train Snitch (data flywheel)
 
-When Snitch catches a lie, the Snitch Bar menu and CLI let you mark the verdict **👍 correct** or **👎 incorrect**. These labels train a future semantic verifier.
+When Snitch catches a lie, the Snitch Bar menu and CLI let you mark the verdict **correct** or **incorrect**. These labels train a future semantic verifier.
 
-- **Snitch Bar:** 👍 / 👎 items under the latest lie, plus a persistent **Share labels anonymously** checkbox
+- **Snitch Bar:** **Mark Correct** / **Mark Incorrect** under the latest lie, plus **History ▸ Share labels anonymously**
 - **CLI:** `snitch label <run-id> correct --share` / `incorrect`
-- **Missed a lie?** `snitch label missed --claimed "what the agent said" --actual "what happened"` — false negatives are the most valuable training data of all
+- **Missed a lie?** **History ▸ Report Missed Lie…** or `snitch label missed --claimed "what the agent said" --actual "what happened"` — false negatives are the most valuable training data of all
 
 Labels are stored locally. Sharing is **off by default** and requires two opt-ins: mark labels as shareable (the Bar checkbox / `--share` / `telemetry.share_by_default`), and enable the sync channel:
 
@@ -227,13 +230,13 @@ Community accuracy tracking ("how often do coding agents actually lie?") is comi
 
 ## Roadmap
 
-- **v1 (this release):** Multi-harness ingestion (Cursor + Claude Code + Codex + Pi + OpenCode), harness-agnostic shell output, data labeling + opt-in telemetry flywheel.
-- **v2:** A locally-run false-positive classifier trained on v1 labels — reduces alert noise by filtering regex hits that aren't genuine claims. `snitch model pull` distributes the free model.
-- **v3 (Snitchworks):** A paid team layer — centralized dashboard, policy engine, premium semantic claim extraction.
+- **0.3.x (this release):** Multi-harness ingestion (Cursor + Claude Code + Codex + Pi + OpenCode), session lookback, data labeling + opt-in telemetry flywheel, Snitch Bar notifications with app icon.
+- **Later:** A locally-run false-positive classifier trained on community labels — reduces alert noise by filtering regex hits that aren't genuine claims.
+- **Snitchworks:** A paid team layer — centralized dashboard, policy engine, premium semantic claim extraction.
 
 ## Limitations
 
-- Deterministic regex extraction only (no LLM claim parsing) — semantic extraction is a v2/v3 goal
+- Deterministic regex extraction only (no LLM claim parsing) — semantic extraction is a later goal
 - Lookback is limited to the current agent session (3 turns), not cross-session history
 - Subagent tool calls are merged by **time window**, not `tool_use_id` mapping
 - Consistency checks remain same-turn only

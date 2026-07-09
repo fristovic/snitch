@@ -36,7 +36,7 @@ snitch status
 snitch doctor
 ```
 
-Look for the Snitch icon in the menu bar. Click it for status, **Show Last Lie**, or **Open Dashboard…**.
+Look for the Snitch icon in the menu bar. Click it for status, **View Details…**, or **History ▸ Open Dashboard…**.
 
 ## Enabling more agents
 

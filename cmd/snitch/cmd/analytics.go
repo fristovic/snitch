@@ -7,6 +7,7 @@ import (
 	"github.com/fristovic/snitch/internal/platform"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/fristovic/snitch/internal/report"
+	"github.com/fristovic/snitch/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,7 @@ var analyticsCmd = &cobra.Command{
 			return err
 		}
 		defer store.Close()
-		reporter := report.New(cfg.Analytics, store, "0.1.0")
+		reporter := report.New(cfg.Analytics, store, version.Version)
 		data, err := reporter.DryRun()
 		if err != nil {
 			return err

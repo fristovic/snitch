@@ -104,5 +104,5 @@ Pattern changes require maintainer approval (enforced via `CODEOWNERS` on
 - [ ] New claim types come with a verifier + contradiction test
 
 Once merged, your pattern's real-world precision is tracked through the data
-flywheel — user 👍/👎 labels on its verdicts. Patterns whose community labels
+flywheel — user Mark Correct / Mark Incorrect labels on its verdicts. Patterns whose community labels
 show sustained false positives get reverted.

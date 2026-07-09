@@ -40,7 +40,7 @@ body:
     attributes:
       label: Snitch version
       description: Output of `snitch status` or `snitch --version`
-      placeholder: e.g. 0.1.4
+      placeholder: e.g. 0.3.1
     validations:
       required: true
   - type: textarea

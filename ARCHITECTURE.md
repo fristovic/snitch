@@ -4,7 +4,7 @@ Snitch is a **lie detector** for AI coding agents. It extracts claims from assis
 
 **Multi-harness:** Snitch ingests transcripts from five agents — Cursor, Claude Code, Codex, Pi (all JSONL via fsnotify) and OpenCode (SQLite via polling). Each harness provides a parser/reader, a path resolver, a shell-output resolver, and a tool-name normalization map, bundled in a `harness.Descriptor` registry. The verification pipeline is harness-agnostic: every harness normalizes its raw tool names to a canonical internal vocabulary at parse time.
 
-**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires alerts on new lies, exposes **Show Last Lie** / **Open Dashboard…**, and collects 👍/👎 feedback labels. The CLI (`snitch`) is for history, debugging, and power users.
+**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires Notification Center alerts on new lies (app-bundle icon), exposes **View Details…** / **History ▸ Open Dashboard…**, and collects **Mark Correct** / **Mark Incorrect** feedback labels. The CLI (`snitch`) is for history, debugging, and power users.
 
 ## Data flow
 
@@ -25,9 +25,9 @@ Agent transcripts (Cursor/Claude/Codex/Pi JSONL via fsnotify,
         │              verifiers → SQLite (+ turn snapshots)
         │                    │
         │                    ▼
-        │              internal/notify (macOS alerts on fail)
+        │              run.completed (+ top-lie fields)
         ▼
- snitchd IPC ◄──── Snitch Bar (subscribe, status, get_claims)
+ snitchd IPC ◄──── Snitch Bar (subscribe, status, get_claims, notify.Deliver)
         │
         ▼
  snitch log / dashboard (CLI)
@@ -43,9 +43,9 @@ Agent transcripts (Cursor/Claude/Codex/Pi JSONL via fsnotify,
 | `internal/verify` | Prose extractor + consistency + contradiction + tool verifiers (harness-agnostic; shell output via per-harness resolver) |
 | `internal/record` | SQLite runs + claims + user feedback labels |
 | `internal/ipc` | Unix socket RPC for CLI and Snitch Bar (incl. `set_label` feedback) |
-| `internal/notify` | macOS Notification Center alerts from `snitchd` |
-| `cmd/snitchd` | Daemon: watcher, capture, verify, IPC, notifications |
-| `cmd/snitchbar` | Menu bar app: daemon lifecycle, tray UI, lie alerts |
+| `internal/notify` | macOS Notification Center alerts delivered by Snitch Bar (CGO) |
+| `cmd/snitchd` | Daemon: watcher, capture, verify, IPC |
+| `cmd/snitchbar` | Menu bar app: daemon lifecycle, tray UI, notifications, lie alerts |
 | `cmd/snitch` | CLI + TUI (`doctor`, `uninstall`) |
 
 ## Menu bar flow
@@ -53,8 +53,8 @@ Agent transcripts (Cursor/Claude/Codex/Pi JSONL via fsnotify,
 1. LaunchAgent (`com.snitch.menubar`) opens **Snitch Bar.app** at login.
 2. Snitch Bar starts bundled `snitchd` (or finds it on PATH) and connects via IPC.
 3. Menu shows **Snitching...**, **Start Snitching**, or **Stop Snitching** depending on state.
-4. On `subscribe` events with failed runs, icon enters alert state; optional Notification Center alert from `snitchd`.
-5. **Show Last Lie** loads the latest lie via IPC (`get_claims`) and opens `snitch log --run <id>` in Terminal.
+4. On `subscribe` `run.completed` events, Snitch Bar may call `notify.Deliver` (Notification Center, Snitch app icon) and, for fails, enter alert state.
+5. **View Details…** loads the latest lie via IPC (`get_claims`) and opens `snitch log --run <id>` in Terminal.
 
 ## Evidence enrichment pipeline
 
@@ -68,9 +68,9 @@ After capture, `verify.BuildVerifyContext` assembles evidence before verifiers r
 
 Turn snapshots persist `payload_json`, `start_head`, `end_head`, and `file_manifest_json` for the next turn's baseline.
 
-## Data flywheel (v1)
+## Data flywheel
 
-Every verified run can carry a user feedback label. The Snitch Bar menu exposes 👍/👎 on the latest lie; the CLI exposes `snitch label` and `snitch label missed` (false negatives, stored in `missed_claims`). Labels are stored on the `runs` table (`label_verdict`, `label_shared`, `label_synced`). When telemetry is opted in (`telemetry.enabled`), `snitchd` drains shared labels to the training endpoint on an interval; only metadata (claim type, harness, model, verdict, label, and a SHA-256 hash of the claim text for dedup) is sent — no code, paths, or claim text.
+Every verified run can carry a user feedback label. The Snitch Bar menu exposes **Mark Correct** / **Mark Incorrect** on the latest lie; the CLI exposes `snitch label` and `snitch label missed` (false negatives, stored in `missed_claims`). Labels are stored on the `runs` table (`label_verdict`, `label_shared`, `label_synced`). When telemetry is opted in (`telemetry.enabled`), `snitchd` drains shared labels to the training endpoint on an interval; only metadata (claim type, harness, model, verdict, label, and a SHA-256 hash of the claim text for dedup) is sent — no code, paths, or claim text.
 
 ## Prose lie detection
 

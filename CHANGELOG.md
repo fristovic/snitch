@@ -1,23 +1,39 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-07-09
+
+Multi-harness lie detection, data flywheel, Snitch Bar–owned notifications with the Snitch app icon, and a round of UX/reliability fixes after end-to-end dogfooding.
 
 ### Added
 
-- **Multi-harness ingestion** — Claude Code, Codex, Pi (JSONL), and OpenCode (SQLite) alongside Cursor; registry-driven, opt-in per platform (`snitch config set platforms.<name>.enabled true`)
-- **Data flywheel** — `snitch label <run-id> correct|incorrect`, `snitch label missed`, Snitch Bar 👍/👎 + "Report Missed Lie…" + "Share labels anonymously" checkbox
-- **Opt-in telemetry** — metadata-only labeled-verdict sync (claim type, harness, model, verdict, label, claim-text hash) to the training pipeline; off by default
+- **Multi-harness ingestion** — Claude Code, Codex, Pi (JSONL), and OpenCode (SQLite) alongside Cursor; registry-driven and opt-in per platform (`snitch config set platforms.<name>.enabled true`)
+- **Session lookback** — verification can credit evidence from up to three prior turns in the same session (git, shell, file tools, stubs); recap/summary prose is severity-calibrated
+- **Subagent merge** — Cursor `subagents/*.jsonl` tool calls overlapping the parent turn window are merged into verification context
+- **Data flywheel** — `snitch label <run-id> correct|incorrect`, `snitch label missed`, Snitch Bar **Mark Correct** / **Mark Incorrect**, **Report Missed Lie…**, and **Share labels anonymously**
+- **Opt-in telemetry** — metadata-only labeled-verdict sync (claim type, harness, model, verdict, label, claim-text hash); off by default
 - `snitch replay <path>` — run transcripts through the verification pipeline offline against a throwaway database
-- `snitch log --harness <name>`, `snitch status --detailed` per-harness run counts, per-harness `snitch doctor` checks
-- Idle-flush in the transcript watcher so a session's final turn is captured even without an explicit end marker
+- `snitch log --harness <name>`, `snitch status --detailed` (per-harness run counts), per-harness `snitch doctor` checks
+- Idle-flush in the transcript watcher so a session’s final turn is captured without an explicit end marker
 - Claim-pattern registry with CI-enforced example/negative tests; contributor guides for adding harnesses and patterns
+- OSS hygiene — issue templates, CODEOWNERS, dependabot, Code of Conduct, security policy updates
+- Shared `internal/textutil` helpers for consistent truncation across CLI, menu, and notifications
+- Bundled **AppIcon.icns** from `assets/snitch_head.png` so Notification Center / Finder show the Snitch head
 
 ### Changed
 
-- Single `turnAssembler` now encodes every harness's turn-boundary semantics (watcher, OpenCode reader, and replay all share it)
+- **Notifications move to Snitch Bar** — macOS alerts are delivered from the app bundle (CGO + `NSUserNotification`) so the Snitch icon is used instead of Script Editor / `osascript`; `snitchd` no longer posts notifications
+- Verified-run events carry top-lie fields (`top_claim_type`, `top_claimed`, `top_actual`); Snitch Bar calls `notify.Deliver` with a cached notifications config (no extra `get_config` / `get_run` round-trips)
+- Snitch Bar menu redesign — disabled **Latest:** preview, **View Details…**, **Mark Correct** / **Mark Incorrect**, and a **History** submenu (Open Dashboard…, Report Missed Lie…, Share labels anonymously)
+- Single `turnAssembler` encodes every harness’s turn-boundary semantics (watcher, OpenCode reader, and replay)
 - Turn snapshots are secret-scrubbed before persistence (previously only combined output was scrubbed)
-- Question/conditional/modal phrasing is suppressed for all claim types (fewer false positives)
+- Question / conditional / modal phrasing is suppressed for all claim types (fewer false positives)
 - Config: legacy top-level `cursor:` block removed; use `platforms.cursor`
+- Config structs expose stable lowercase `json` tags for IPC `get_config`
+- Dashboard TUI — stacked layout on narrow terminals, single-line list rows, visible selection highlight, shared layout metrics
+- IPC scanners use an 8 MiB buffer so large `get_runs` / `get_claims` responses are not truncated
+- Watcher catch-up on directory create ingests owned files in that directory only; nested dirs get their own Create events
+- `snitch doctor` resolves Snitch Bar.app the same way as `snitch start` (including Homebrew Cellar / `SNITCH_BAR_APP`)
+- Bundle script fails loudly if `sips` / `iconutil` cannot build `AppIcon.icns` when the source PNG exists
 
 ### Fixed
 
@@ -25,6 +41,9 @@
 - OpenCode poll cursor could skip late-completing turns and emit in-progress partials
 - `snitch label` required a doubled `label label` invocation
 - `daemon.log_level` was loaded but never applied
+- Burst create+write of new session transcripts could be seeded at EOF and skipped
+- Dashboard layout cut off text / left large blank gaps on typical terminal sizes
+- Dead / stub dashboard project-filter (`p` key) and unreachable verdict display branch removed
 
 ## 0.1.4 — 2026-07-03
 
