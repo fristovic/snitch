@@ -1,4 +1,4 @@
--- Upgrade legacy runs tables from pre-lie-detector schemas.
+-- Upgrade legacy runs tables from pre-claim-verifier schemas.
 ALTER TABLE runs ADD COLUMN session_id TEXT;
 ALTER TABLE runs ADD COLUMN transcript_path TEXT;
 ALTER TABLE runs ADD COLUMN project_path TEXT;

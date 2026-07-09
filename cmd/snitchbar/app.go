@@ -20,7 +20,7 @@ import (
 	"github.com/getlantern/systray"
 )
 
-// flywheelUIEnabled gates Mark Correct/Incorrect, Report Missed Lie, and Share
+// flywheelUIEnabled gates Mark Correct/Incorrect, Report Missed Claim, and Share
 // labels in the menu. Flip to true when shipping the labeling flywheel
 // (Mark items still also require telemetry.enabled).
 const flywheelUIEnabled = false
@@ -36,7 +36,7 @@ type trayApp struct {
 
 	status         *systray.MenuItem
 	toggleItem     *systray.MenuItem
-	previewItem    *systray.MenuItem // disabled context for latest lie
+	previewItem    *systray.MenuItem // disabled context for latest flagged claim
 	viewItem       *systray.MenuItem
 	markCorrect    *systray.MenuItem
 	markIncorrect  *systray.MenuItem
@@ -70,17 +70,17 @@ func (a *trayApp) onReady() {
 	a.status = systray.AddMenuItem("Starting…", "")
 	a.status.Disable()
 	systray.AddSeparator()
-	a.toggleItem = systray.AddMenuItem("Stop Snitching", "Start or stop lie detection")
+	a.toggleItem = systray.AddMenuItem("Stop Snitching", "Start or stop claim verification")
 	systray.AddSeparator()
-	a.previewItem = systray.AddMenuItem("No lies yet", "Most recent lie Snitch caught")
+	a.previewItem = systray.AddMenuItem("No flagged claims yet", "Most recent flagged claim Snitch caught")
 	a.previewItem.Disable()
-	a.viewItem = systray.AddMenuItem("View Details…", "Open full verification log for the latest lie")
-	a.markCorrect = systray.AddMenuItem("Mark Correct", "Snitch was right — this really was a lie (stored locally)")
+	a.viewItem = systray.AddMenuItem("View Details…", "Open full verification log for the latest flagged claim")
+	a.markCorrect = systray.AddMenuItem("Mark Correct", "Snitch was right — this really was a false claim (stored locally)")
 	a.markIncorrect = systray.AddMenuItem("Mark Incorrect", "Snitch was wrong — false positive (stored locally)")
 	systray.AddSeparator()
 	a.historyItem = systray.AddMenuItem("History", "Browse history and training options")
-	a.dashboardItem = a.historyItem.AddSubMenuItem("Open Dashboard…", "Browse runs and lies in the interactive TUI")
-	a.missedItem = a.historyItem.AddSubMenuItem("Report Missed Lie…", "Report a lie Snitch missed (opens terminal)")
+	a.dashboardItem = a.historyItem.AddSubMenuItem("Open Dashboard…", "Browse runs and flagged claims in the interactive TUI")
+	a.missedItem = a.historyItem.AddSubMenuItem("Report Missed Claim…", "Report a claim Snitch missed (opens terminal)")
 	a.shareItem = a.historyItem.AddSubMenuItemCheckbox("Share labels anonymously", "Share claim sentence + short context + claimed→actual to train Snitch — never prompts, code, or paths", false)
 	a.markCorrect.Hide()
 	a.markIncorrect.Hide()
@@ -89,6 +89,9 @@ func (a *trayApp) onReady() {
 	systray.AddSeparator()
 	a.prefsItem = systray.AddMenuItem("Preferences…", "")
 	a.quitItem = systray.AddMenuItem("Quit Snitch Bar", "")
+
+	// Request Notification Center permission early (UNUserNotificationCenter).
+	notify.Init()
 
 	go a.handleClicks()
 	go a.pollLoop()
@@ -107,8 +110,8 @@ func (a *trayApp) handleClicks() {
 		select {
 		case <-a.viewItem.ClickedCh:
 			a.acknowledgeAlert()
-			a.loadLatestLie()
-			a.showLastLie()
+			a.loadLatestClaim()
+			a.showLastClaim()
 		case <-a.markCorrect.ClickedCh:
 			a.submitLabel("correct")
 		case <-a.markIncorrect.ClickedCh:
@@ -163,7 +166,7 @@ func (a *trayApp) startWatching() {
 	a.state.Starting = false
 	a.state.Connected = true
 	a.mu.Unlock()
-	a.loadLatestLie()
+	a.loadLatestClaim()
 	a.loadShareState()
 	a.signalRefresh()
 }
@@ -179,14 +182,14 @@ func (a *trayApp) pauseWatching() {
 	a.signalRefresh()
 }
 
-func (a *trayApp) showLastLie() {
+func (a *trayApp) showLastClaim() {
 	a.mu.Lock()
-	lie := a.state.Lie
+	c := a.state.LatestClaim
 	a.mu.Unlock()
-	if lie == nil {
+	if c == nil {
 		return
 	}
-	_ = openTerminal(fmt.Sprintf("snitch log --run %s", lie.RunID))
+	_ = openTerminal(fmt.Sprintf("snitch log --run %s", c.RunID))
 }
 
 func (a *trayApp) pollLoop() {
@@ -225,7 +228,7 @@ func (a *trayApp) watchLoop() {
 			a.state.Connected = true
 			a.state.Alert = true
 			a.mu.Unlock()
-			a.loadLatestLie()
+			a.loadLatestClaim()
 			a.maybeShowConsent()
 			a.signalRefresh()
 			return nil
@@ -293,31 +296,31 @@ func (a *trayApp) refreshConnection() {
 	a.state.Connected = true
 	a.mu.Unlock()
 	if wasOffline {
-		a.loadLatestLie()
+		a.loadLatestClaim()
 	}
 	a.signalRefresh()
 }
 
-func (a *trayApp) loadLatestLie() {
+func (a *trayApp) loadLatestClaim() {
 	client, err := ipc.Connect(a.socket)
 	if err != nil {
 		return
 	}
 	defer client.Close()
-	data, err := client.Call("get_claims", map[string]any{"lies_only": true, "limit": 1})
+	data, err := client.Call("get_latest_top_claim", nil)
 	if err != nil {
 		return
 	}
-	var claims []record.LieClaim
-	if err := json.Unmarshal(data, &claims); err != nil || len(claims) == 0 {
+	var flagged *record.ClaimWithRun
+	if err := json.Unmarshal(data, &flagged); err != nil || flagged == nil {
 		a.mu.Lock()
-		a.state.Lie = nil
+		a.state.LatestClaim = nil
 		a.mu.Unlock()
 		a.signalRefresh()
 		return
 	}
 	a.mu.Lock()
-	a.state.Lie = &claims[0]
+	a.state.LatestClaim = flagged
 	a.mu.Unlock()
 	a.signalRefresh()
 }
@@ -331,16 +334,16 @@ func (a *trayApp) maybeNotify(p event.RunVerifiedPayload) {
 	notify.Deliver(p, cfg)
 }
 
-// submitLabel records a "Was this right?" verdict for the latest lie. The
+// submitLabel records a "Was this right?" verdict for the latest flagged claim. The
 // shared flag comes explicitly from the persisted "Share labels anonymously"
 // checkbox state.
 func (a *trayApp) submitLabel(verdict string) {
 	a.mu.Lock()
-	lie := a.state.Lie
+	c := a.state.LatestClaim
 	shared := a.shareLabels
 	a.mu.Unlock()
-	if lie == nil {
-		a.flashTitle("No lie to label yet")
+	if c == nil {
+		a.flashTitle("No claim to label yet")
 		return
 	}
 	client, err := ipc.Connect(a.socket)
@@ -349,7 +352,7 @@ func (a *trayApp) submitLabel(verdict string) {
 	}
 	defer client.Close()
 	if _, err := client.Call("set_label", map[string]any{
-		"run_id": lie.RunID,
+		"run_id": c.RunID,
 		"label":  verdict,
 		"shared": shared,
 	}); err != nil {
@@ -403,7 +406,7 @@ func (a *trayApp) toggleShare() {
 }
 
 // maybeShowConsent shows the one-time telemetry consent prompt on the first
-// detected lie when the flywheel UI and telemetry sync are enabled. It never
+// flagged claim when the flywheel UI and telemetry sync are enabled. It never
 // enables sharing — it only informs; the user opts in via the checkbox or CLI.
 func (a *trayApp) maybeShowConsent() {
 	if !flywheelUIEnabled {
@@ -473,9 +476,9 @@ func (a *trayApp) render() {
 		a.toggleItem.Enable()
 	}
 
-	a.previewItem.SetTitle(LatestLiePreview(st.Lie))
+	a.previewItem.SetTitle(LatestClaimPreview(st.LatestClaim))
 	a.previewItem.Disable()
-	if st.Lie == nil {
+	if st.LatestClaim == nil {
 		a.viewItem.Disable()
 	} else {
 		a.viewItem.Enable()
@@ -499,7 +502,7 @@ func (a *trayApp) render() {
 	}
 	a.markCorrect.Show()
 	a.markIncorrect.Show()
-	if st.Lie == nil {
+	if st.LatestClaim == nil {
 		a.markCorrect.Disable()
 		a.markIncorrect.Disable()
 	} else {

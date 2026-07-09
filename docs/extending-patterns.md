@@ -1,14 +1,14 @@
 # Adding a Claim Pattern
 
-Every lie Snitch catches starts with a regex pattern in the claim registry:
+Every false claim Snitch catches starts with a regex pattern in the claim registry:
 [`internal/verify/prose.go`](../internal/verify/prose.go) → `claimPatterns`.
-If you've watched an agent lie about something Snitch missed, you can teach it
+If you've watched an agent make a false claim about something Snitch missed, you can teach it
 the pattern. This is the single highest-leverage contribution to the project.
 
 ## The one rule: precision over recall
 
 **A pattern that produces false positives will be rejected, no matter how many
-real lies it would catch.** A missed lie costs nothing — the agent got away
+real false claims it would catch.** A missed claim costs nothing — the agent got away
 with it once. A false alarm costs trust — the user stops believing Snitch, and
 then every catch is worthless. Recall is optional. Precision is not.
 
@@ -71,8 +71,8 @@ Run the replay tool over your own session history and check your pattern
 doesn't fire on innocent prose:
 
 ```bash
-go run ./cmd/snitch replay ~/.cursor/projects --lies-only
-go run ./cmd/snitch replay --harness claude ~/.claude/projects --lies-only
+go run ./cmd/snitch replay ~/.cursor/projects --false-claims-only
+go run ./cmd/snitch replay --harness claude ~/.claude/projects --false-claims-only
 ```
 
 The PR template asks you to paste a summary of this run. Maintainers will run
@@ -90,7 +90,7 @@ If no existing `ClaimType` fits:
    A pattern whose claims no verifier can contradict is dead weight.
 3. Add a contradiction test in `verifiers/contradiction_test.go` proving the
    claim can be both verified and refuted.
-4. Document the type in the README's "Lie types" table.
+4. Document the type in the README's "Claim types" table.
 
 ## Review and approval
 

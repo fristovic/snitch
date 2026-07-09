@@ -16,7 +16,7 @@ gofmt -l .        # must be clean
 
 ## The two most valuable contributions
 
-### 1. Adding a claim pattern (teaching Snitch a new lie)
+### 1. Adding a claim pattern (teaching Snitch a new false-claim pattern)
 
 Full guide: **[docs/extending-patterns.md](docs/extending-patterns.md)**
 
@@ -30,7 +30,7 @@ on the maintainers' replay corpus is rejected regardless of what it catches.
 Validate against your own sessions before opening the PR:
 
 ```bash
-go run ./cmd/snitch replay ~/.cursor/projects --lies-only
+go run ./cmd/snitch replay ~/.cursor/projects --false-claims-only
 ```
 
 ### 2. Adding a harness (supporting a new AI agent)

@@ -1,6 +1,6 @@
 -- 006_missed_claims.sql — user-reported false negatives (v1 data flywheel).
 --
--- When an agent lied about something Snitch missed, the user can report it:
+-- When an agent made a false claim Snitch missed, the user can report it:
 -- what the agent claimed vs what actually happened. These are the
 -- highest-value training examples — claims regex can't catch. Claim/actual
 -- text is stored locally only. Telemetry (if opted in) shares metadata plus a

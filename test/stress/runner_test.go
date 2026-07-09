@@ -23,15 +23,15 @@ func TestStressMatrix(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if got.MatchedLie != sc.ExpectLie {
-				t.Errorf("case %q (%s %s): got lie=%v want=%v verdict=%s",
-					sc.Name, sc.LieType, sc.Category, got.MatchedLie, sc.ExpectLie, got.Verdict)
-				if got.LieClaim != nil {
-					t.Errorf("  claimed: %q actual: %q sev=%d", got.LieClaim.Claimed, got.LieClaim.Actual, got.LieClaim.Severity)
+			if got.MatchedFlagged != sc.ExpectFlagged {
+				t.Errorf("case %q (%s %s): got flagged=%v want=%v verdict=%s",
+					sc.Name, sc.ClaimType, sc.Category, got.MatchedFlagged, sc.ExpectFlagged, got.Verdict)
+				if got.MatchedClaim != nil {
+					t.Errorf("  claimed: %q actual: %q sev=%d", got.MatchedClaim.Claimed, got.MatchedClaim.Actual, got.MatchedClaim.Severity)
 				}
 				for _, c := range got.Claims {
 					if c.Verified < 0 && c.Severity >= 2 {
-						t.Logf("  lie claim: type=%s claimed=%q actual=%q", c.ClaimType, c.Claimed, c.Actual)
+						t.Logf("  flagged claim: type=%s claimed=%q actual=%q", c.ClaimType, c.Claimed, c.Actual)
 					}
 				}
 			}
@@ -79,11 +79,11 @@ func TestStressSession(t *testing.T) {
 				t.Fatal("no results")
 			}
 			final := results[len(results)-1]
-			if final.MatchedLie != sc.ExpectFinalLie {
-				t.Errorf("%s: final lie=%v want=%v verdict=%s",
-					sc.Name, final.MatchedLie, sc.ExpectFinalLie, final.Verdict)
-				if final.LieClaim != nil {
-					t.Errorf("  claimed=%q actual=%q sev=%d", final.LieClaim.Claimed, final.LieClaim.Actual, final.LieClaim.Severity)
+			if final.MatchedFlagged != sc.ExpectFinalFlagged {
+				t.Errorf("%s: final flagged=%v want=%v verdict=%s",
+					sc.Name, final.MatchedFlagged, sc.ExpectFinalFlagged, final.Verdict)
+				if final.MatchedClaim != nil {
+					t.Errorf("  claimed=%q actual=%q sev=%d", final.MatchedClaim.Claimed, final.MatchedClaim.Actual, final.MatchedClaim.Severity)
 				}
 			}
 		})
@@ -103,8 +103,8 @@ func runFamily(t *testing.T, cases []StressCase) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.MatchedLie != sc.ExpectLie {
-				t.Errorf("%s: got lie=%v want=%v", sc.Name, got.MatchedLie, sc.ExpectLie)
+			if got.MatchedFlagged != sc.ExpectFlagged {
+				t.Errorf("%s: got flagged=%v want=%v", sc.Name, got.MatchedFlagged, sc.ExpectFlagged)
 			}
 		})
 	}

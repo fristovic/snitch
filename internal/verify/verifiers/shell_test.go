@@ -14,7 +14,7 @@ import (
 func TestShellVerifierSyntaxOnly(t *testing.T) {
 	v := verifiers.NewShellVerifier(config.ShellVerifierConfig{})
 	res, err := v.Verify(verifiers.Claim{
-		Type: "Shell", Source: "tool",
+		Type: verifiers.ClaimToolShell, Source: "tool",
 		Target: "go test ./...",
 		Input:  map[string]any{"command": "go test ./..."},
 	}, verifiers.VerifyContext{Cwd: "/tmp"})
@@ -30,7 +30,7 @@ func TestSubagentVerifierMissingDir(t *testing.T) {
 	dir := t.TempDir()
 	parent := filepath.Join(dir, "session.jsonl")
 	v := &verifiers.SubagentVerifier{}
-	res, err := v.Verify(verifiers.Claim{Type: "Task", Source: "tool"}, verifiers.VerifyContext{
+	res, err := v.Verify(verifiers.Claim{Type: verifiers.ClaimToolTask, Source: "tool"}, verifiers.VerifyContext{
 		TranscriptPath: parent,
 		ToolCalls:      []transcript.ToolCall{{Name: "Task"}},
 		ObservedAt:     time.Now(),
@@ -54,7 +54,7 @@ func TestSubagentVerifierNonEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := &verifiers.SubagentVerifier{}
-	res, err := v.Verify(verifiers.Claim{Type: "Task", Source: "tool"}, verifiers.VerifyContext{
+	res, err := v.Verify(verifiers.Claim{Type: verifiers.ClaimToolTask, Source: "tool"}, verifiers.VerifyContext{
 		TranscriptPath: parent,
 		ToolCalls:      []transcript.ToolCall{{Name: "Task"}},
 	})

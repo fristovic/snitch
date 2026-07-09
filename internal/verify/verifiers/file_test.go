@@ -16,7 +16,7 @@ func TestFileVerifierWrite(t *testing.T) {
 	}
 	v := &verifiers.FileVerifier{}
 	res, err := v.Verify(verifiers.Claim{
-		Type: "Write", Source: "tool", Target: "hello.txt", Description: "Write hello.txt",
+		Type: verifiers.ClaimToolWrite, Source: "tool", Target: "hello.txt", Description: "Write hello.txt",
 	}, verifiers.VerifyContext{Cwd: dir})
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestFileVerifierStrReplace(t *testing.T) {
 	}
 	v := &verifiers.FileVerifier{}
 	res, err := v.Verify(verifiers.Claim{
-		Type: "StrReplace", Source: "tool", Target: "main.go",
+		Type: verifiers.ClaimToolStrReplace, Source: "tool", Target: "main.go",
 		Input: map[string]any{"new_string": "// fixed"},
 	}, verifiers.VerifyContext{Cwd: dir})
 	if err != nil {
@@ -49,7 +49,7 @@ func TestFileVerifierDelete(t *testing.T) {
 	dir := t.TempDir()
 	v := &verifiers.FileVerifier{}
 	res, err := v.Verify(verifiers.Claim{
-		Type: "Delete", Source: "tool", Target: "gone.txt",
+		Type: verifiers.ClaimToolDelete, Source: "tool", Target: "gone.txt",
 	}, verifiers.VerifyContext{Cwd: dir})
 	if err != nil {
 		t.Fatal(err)

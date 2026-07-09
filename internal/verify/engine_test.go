@@ -55,12 +55,12 @@ func TestEngineVerifiesToolCalls(t *testing.T) {
 	if len(claims) != 1 {
 		t.Fatalf("claims: %+v", claims)
 	}
-	if claims[0].ClaimType != "Read" {
+	if claims[0].ClaimType != "tool_read" {
 		t.Fatalf("unexpected claim: %+v", claims[0])
 	}
 }
 
-func TestEngineCatchesTestPassLie(t *testing.T) {
+func TestEngineCatchesTestPassFalseClaim(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := record.Open(dir)
 	defer store.Close()
@@ -79,7 +79,7 @@ func TestEngineCatchesTestPassLie(t *testing.T) {
 	engine.Start()
 
 	payload := capture.RunPayload{
-		RunID:         "run-lie",
+		RunID:         "run-false-claim",
 		ProjectPath:   t.TempDir(),
 		AssistantText: "All tests pass and everything looks good.",
 		Output:        "All tests pass",
@@ -87,7 +87,7 @@ func TestEngineCatchesTestPassLie(t *testing.T) {
 		FinishedAt:    time.Now(),
 	}
 	data, _ := json.Marshal(payload)
-	bus.Publish(event.Event{Type: event.EventRunCaptured, Payload: data, ID: "run-lie", Timestamp: time.Now()})
+	bus.Publish(event.Event{Type: event.EventRunCaptured, Payload: data, ID: "run-false-claim", Timestamp: time.Now()})
 
 	select {
 	case <-done:
@@ -95,7 +95,7 @@ func TestEngineCatchesTestPassLie(t *testing.T) {
 		t.Fatal("timeout waiting for fail verdict")
 	}
 
-	claims, _ := store.GetClaimsByRun("run-lie")
+	claims, _ := store.GetClaimsByRun("run-false-claim")
 	found := false
 	for _, c := range claims {
 		if c.ClaimType == "test_pass" && c.Verified < 0 {
@@ -103,6 +103,6 @@ func TestEngineCatchesTestPassLie(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("expected test_pass lie, got %+v", claims)
+		t.Fatalf("expected test_pass false claim, got %+v", claims)
 	}
 }

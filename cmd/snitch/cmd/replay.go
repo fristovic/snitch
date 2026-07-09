@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/fristovic/snitch/internal/capture"
+	"github.com/fristovic/snitch/internal/claims"
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/record"
@@ -19,7 +20,7 @@ import (
 
 var (
 	replayHarness  string
-	replayLiesOnly bool
+	replayFlaggedOnly bool
 )
 
 // replayCmd runs on-device transcripts through the full parse→verify pipeline
@@ -78,16 +79,16 @@ harness parser before opening a PR.`,
 			for _, turn := range turns {
 				turn.Harness = harness
 				engine.VerifyPayload(capture.BuildRunPayload(turn))
-				claims, _ := store.GetClaimsByRun(turn.RunID)
+				runClaims, _ := store.GetClaimsByRun(turn.RunID)
 				totalTurns++
-				totalClaims += len(claims)
+				totalClaims += len(runClaims)
 				printed := false
-				for _, c := range claims {
-					isLie := c.Verified < 0
-					if isLie {
+				for _, c := range runClaims {
+					isFlagged := c.Verified < 0
+					if isFlagged {
 						flagged++
 					}
-					if replayLiesOnly && !isLie {
+					if replayFlaggedOnly && !isFlagged {
 						continue
 					}
 					if !printed {
@@ -95,20 +96,20 @@ harness parser before opening a PR.`,
 						printed = true
 					}
 					mark := "OK "
-					if isLie {
-						mark = "LIE"
+					if isFlagged {
+						mark = "FLAG"
 					}
-					fmt.Printf("  [%s] %-18s sev=%d  %q\n", mark, c.ClaimType, c.Severity, truncateStr(c.Claimed, 90))
-					if isLie && c.Actual != "" {
-						fmt.Printf("        actual: %s\n", truncateStr(c.Actual, 90))
+					fmt.Printf("  [%s] %-22s sev=%d  %q\n", mark, claims.ClaimTypeLabel(c.ClaimType), c.Severity, truncateStr(claims.FlaggedText(claims.FromRecord(c)), 90))
+					if isFlagged && c.Actual != "" {
+						fmt.Printf("        checked: %s\n", truncateStr(c.Actual, 90))
 					}
 				}
 			}
 		}
 
-		fmt.Printf("\nreplayed %d transcript(s): %d turns, %d claims, %d flagged as lies\n",
+		fmt.Printf("\nreplayed %d transcript(s): %d turns, %d claims, %d flagged as false claims\n",
 			len(paths), totalTurns, totalClaims, flagged)
-		fmt.Println("review every LIE above — each false positive is a pattern to fix or label.")
+		fmt.Println("review every FLAG above — each false positive is a pattern to fix or label.")
 		return nil
 	},
 }
@@ -145,6 +146,9 @@ func truncateStr(s string, n int) string {
 
 func init() {
 	replayCmd.Flags().StringVar(&replayHarness, "harness", "", "Force harness (cursor|claude|codex|pi); auto-detected from path if empty")
-	replayCmd.Flags().BoolVar(&replayLiesOnly, "lies-only", false, "Print only claims flagged as lies")
+	replayCmd.Flags().BoolVar(&replayFlaggedOnly, "false-claims-only", false, "Print only claims flagged as false")
+	// Alias kept so scripts from ≤0.3.x keep working after upgrade.
+	replayCmd.Flags().BoolVar(&replayFlaggedOnly, "lies-only", false, "Deprecated alias for --false-claims-only")
+	_ = replayCmd.Flags().MarkHidden("lies-only")
 	rootCmd.AddCommand(replayCmd)
 }

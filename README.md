@@ -8,7 +8,7 @@
 
 <p align="center">
   <span style="display: inline-block; max-width: 720px; text-align: justify;">
-    Snitch is a deterministic prose lie detector for AI coding agents. It watches transcripts from <a href="https://cursor.com">Cursor</a>, <a href="https://claude.com/claude-code">Claude Code</a>, <a href="https://github.com/openai/codex">Codex</a>, <a href="https://pi.dev">Pi</a>, and <a href="https://opencode.ai">OpenCode</a>, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
+    Snitch is a deterministic prose claim verifier for AI coding agents. It watches transcripts from <a href="https://cursor.com">Cursor</a>, <a href="https://claude.com/claude-code">Claude Code</a>, <a href="https://github.com/openai/codex">Codex</a>, <a href="https://pi.dev">Pi</a>, and <a href="https://opencode.ai">OpenCode</a>, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
   </span>
 </p>
 
@@ -24,7 +24,7 @@ brew install snitch
 snitch start
 ```
 
-Snitch Bar opens in the menu bar and starts the lie detector automatically.
+Snitch Bar opens in the menu bar and starts the claim verifier automatically.
 
 ### macOS (curl)
 
@@ -72,20 +72,20 @@ From the Snitch menu:
 | Action | What it does |
 | ------ | ------------ |
 | **Snitching…** / **Paused** / **Offline** | Current detection status |
-| **Start Snitching** / **Stop Snitching** | Turn lie detection on or off |
-| **Latest: …** | Preview of the most recent lie (claim type + short quote) |
+| **Start Snitching** / **Stop Snitching** | Turn claim verification on or off |
+| **Latest: …** | Preview of the most recent flagged claim (type + short quote) |
 | **View Details…** | Open Terminal with full details (`snitch log --run <id>`) |
 | **History ▸ Open Dashboard…** | Open the interactive TUI (`snitch dashboard`) |
 | **Preferences…** | Open `~/.snitch/config.yaml` |
 | **Quit Snitch Bar** | Stop the daemon and exit |
 
-When the model lies, the menu bar icon alerts and Snitch Bar may show a Notification Center alert (Snitch app icon). Click **View Details…** for the full verification breakdown, or **History ▸ Open Dashboard…** to browse history.
+When a false claim is caught, the menu bar icon alerts and Snitch Bar may show a Notification Center alert (Snitch app icon). Click **View Details…** for the full verification breakdown, or **History ▸ Open Dashboard…** to browse history.
 
 ### Terminal (optional)
 
 ```bash
 snitch status             # is detection running?
-snitch dashboard          # browse runs and lies interactively
+snitch dashboard          # browse runs and flagged claims interactively
 snitch log --run <id>     # full detail for one agent turn
 snitch doctor             # install checklist
 ```
@@ -94,14 +94,14 @@ snitch doctor             # install checklist
 
 ## Viewing history: `log` vs `dashboard`
 
-Snitch stores every agent **turn** as a **run** (with a verdict and claims). A **lie** is a high-confidence prose claim inside a run that evidence contradicts.
+Snitch stores every agent **turn** as a **run** (with a verdict and claims). A **false claim** is a high-confidence prose claim inside a run that evidence contradicts.
 
 | View | Best for | What you see |
 | ---- | -------- | ------------ |
 | **`snitch log --run <id>`** | One agent turn | Full breakdown — verdict, prompt, tool calls, every claim with evidence. |
-| **`snitch dashboard`** | Browsing history | Interactive TUI — flip between runs and lies, filter, search, live refresh. |
+| **`snitch dashboard`** | Browsing history | Interactive TUI — flip between runs and flagged claims, filter, search, live refresh. |
 
-**Menu bar shortcuts:** **View Details…** runs `snitch log --run <id>` for the latest lie. **History ▸ Open Dashboard…** runs `snitch dashboard`.
+**Menu bar shortcuts:** **View Details…** runs `snitch log --run <id>` for the latest flagged claim. **History ▸ Open Dashboard…** runs `snitch dashboard`.
 
 ```bash
 snitch log --run abc12345
@@ -116,10 +116,10 @@ snitch dashboard
 
 | Item | Description |
 | ---- | ----------- |
-| **Start / Stop Snitching** | Pause or resume lie detection |
-| Alert icon | Flashes when a new lie is caught |
-| **Latest: …** | Disabled preview of the most recent lie |
-| **View Details…** | Open `snitch log --run <id>` for the latest lie |
+| **Start / Stop Snitching** | Pause or resume claim verification |
+| Alert icon | Flashes when a new false claim is caught |
+| **Latest: …** | Disabled preview of the most recent flagged claim |
+| **View Details…** | Open `snitch log --run <id>` for the latest flagged claim |
 | **History ▸ Open Dashboard…** | Open `snitch dashboard` in Terminal |
 | **Preferences…** | Edit `~/.snitch/config.yaml` |
 | **Quit Snitch Bar** | Stop `snitchd` and exit |
@@ -132,7 +132,7 @@ snitch dashboard
 | `snitch status` | Detection status (`--detailed` for per-harness stats) |
 | `snitch log --run <id>` | Full verification detail for one run (`--trace`, `--json`) |
 | `snitch log --harness <name>` | List recent runs for one agent platform |
-| `snitch dashboard` | Interactive TUI for runs and lies (`--harness` filter) |
+| `snitch dashboard` | Interactive TUI for runs and flagged claims (`--harness` filter) |
 | `snitch replay <path>` | Run any transcript through the pipeline offline — measure accuracy on your own sessions |
 | `snitch doctor` | Debug install checklist (per-harness) |
 | `snitch uninstall` | Remove daemon and binaries (`--purge` for data) |
@@ -154,7 +154,7 @@ notifications:
 
 The first notification triggers the macOS permission prompt for Snitch Bar.
 
-## Lie types
+## Claim types
 
 
 | Type                 | Example prose              | Contradiction                                      |
@@ -168,10 +168,15 @@ The first notification triggers the macOS permission prompt for Snitch Bar.
 | `file_modified`      | "updated foo.go"           | No matching `Write`/`StrReplace` + file missing    |
 | `file_deleted`       | "deleted foo.go"           | No matching `Delete`/`StrReplace` + file still present |
 | `stub`               | "fully implemented"        | Written file is a placeholder (`panic("TODO")`, …) |
-| `no_action`          | action claims              | Zero tool calls in the turn                        |
+| `no_action`          | action claims              | Zero mutating tool calls in the turn               |
 | `self_contradiction` | "won't modify X"           | Tool call edits X in the same turn                 |
 | `count_mismatch`     | "updated all 5 files"      | File tool-call count ≠ 5                           |
 | `negation_violation` | "did not touch tests"      | `*_test.*` file edited in the turn                 |
+| `tool_write`         | Write tool call            | File missing / empty after write                   |
+| `tool_str_replace`   | StrReplace tool call       | Edit not reflected on disk                         |
+| `tool_delete`        | Delete tool call           | File still exists                                  |
+| `tool_shell`         | Shell tool call            | Command evidence mismatch                          |
+| `tool_read` / `tool_glob` / `tool_task` | Read / Glob / Task | Tool effect vs disk / subagent evidence |
 
 
 
@@ -206,7 +211,7 @@ The dashboard accepts a `--harness` filter to scope to one agent: `snitch dashbo
 
 ## Help train Snitch (coming soon)
 
-A community labeling flywheel — mark whether Snitch was right or wrong, report missed lies, and optionally share training examples — is **coming soon**. Labels stay local by default.
+A community labeling flywheel — mark whether Snitch was right or wrong, report missed claims, and optionally share training examples — is **coming soon**. Labels stay local by default.
 
 When sharing is enabled (dual opt-in: `telemetry.enabled` + share flag), a shared example may include:
 
@@ -219,7 +224,8 @@ When sharing is enabled (dual opt-in: `telemetry.enabled` + share flag), a share
 
 ## Roadmap
 
-- **0.3.x (this release):** Multi-harness ingestion (Cursor + Claude Code + Codex + Pi + OpenCode), session lookback, Snitch Bar notifications with app icon.
+- **0.4.x (this release):** Claim-first UX (flagged sentence → checked), `tool_*` types, `UNUserNotificationCenter` alerts.
+- **0.3.x:** Multi-harness ingestion (Cursor + Claude Code + Codex + Pi + OpenCode), session lookback, Snitch Bar notifications with app icon.
 - **Coming soon:** Community labeling and opt-in sync of claim sentences + short context to train a false-positive filter.
 - **Later:** A locally-run false-positive classifier trained on community labels — reduces alert noise by filtering regex hits that aren't genuine claims.
 - **Snitchworks:** A paid team layer — centralized dashboard, policy engine, premium semantic claim extraction.

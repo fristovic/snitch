@@ -54,13 +54,13 @@ snitch start
 
 ## Menu bar (Snitch Bar)
 
-Open Snitch Bar from Terminal with `snitch start`, or from the menu bar after install. Snitch Bar is the main app (no Dock icon). It **starts lie detection automatically** when you open it.
+Open Snitch Bar from Terminal with `snitch start`, or from the menu bar after install. Snitch Bar is the main app (no Dock icon). It **starts claim verification automatically** when you open it.
 
-- **Snitching...** status when the lie detector is active
-- **Start Snitching** / **Stop Snitching** — pause / resume lie detection
-- **Latest: …** — disabled preview of the most recent lie (claim type + short quote)
-- **View Details…** — open `snitch log --run <id>` for that lie
-- **History ▸ Open Dashboard…** — browse runs and lies
+- **Snitching...** status when the claim verifier is active
+- **Start Snitching** / **Stop Snitching** — pause / resume claim verification
+- **Latest: …** — disabled preview of the most recent flagged claim (type + short quote)
+- **View Details…** — open `snitch log --run <id>` for that claim
+- **History ▸ Open Dashboard…** — browse runs and flagged claims
 - **Quit Snitch Bar** stops the daemon
 
 If Snitch is paused or offline, choose **Start Snitching** to resume.
@@ -69,11 +69,11 @@ Disable login auto-start: `SNITCH_MENUBAR=0 ./scripts/install.sh`
 
 ### Labeling (coming soon)
 
-Community labeling (Mark Correct / Incorrect, report missed lies, opt-in sync) is **coming soon**. When enabled, shared examples may include the claim sentence, short surrounding context, and claimed→actual — never prompts, code, or paths. See the README “Help train Snitch” section.
+Community labeling (Mark Correct / Incorrect, report missed claims, opt-in sync) is **coming soon**. When enabled, shared examples may include the claim sentence, short surrounding context, and claimed→actual — never prompts, code, or paths. See the README “Help train Snitch” section.
 
 ## Notifications
 
-When a lie is caught, Snitch Bar can send a macOS notification (title: claim type, body: claimed → actual). Enabled by default; configure under `notifications` in `~/.snitch/config.yaml`. macOS will prompt for notification permission on the first alert.
+When a false claim is caught, Snitch Bar can send a macOS notification (title: claim type, body: claimed → actual). Enabled by default; configure under `notifications` in `~/.snitch/config.yaml`. macOS will prompt for notification permission on the first alert.
 
 ## How it works
 
@@ -82,7 +82,7 @@ When an agent turn ends (any enabled harness), Snitch:
 1. Reads the turn from the agent's local transcript artifacts (JSONL files, or SQLite for OpenCode)
 2. Extracts claims from assistant **prose** (not just tool calls)
 3. Cross-checks against tool calls, captured shell output (inline tool results, or Cursor terminal files), files on disk, git, session lookback (up to 3 prior turns), and same-turn consistency
-4. Records lies in `~/.snitch/snitch.db`
+4. Records flagged claims in `~/.snitch/snitch.db`
 
 A **snitch** is a high-confidence prose claim that evidence contradicts.
 
@@ -113,7 +113,11 @@ Project: /Users/…/snitch
 Tool calls: 11
 Harness: cursor
 Summary: "StrReplace …/menu_test.go" → "new_string not found in file"
-  [StrReplace] StrReplace …/menu_test.go → new_string not found in file (sev 2, file)
+
+Claim: File edit (tool_str_replace) [tool]
+Flagged: StrReplace …/menu_test.go
+Checked: new_string not found in file
+Verifier: file (sev 2)
 ```
 
 | Field | Meaning |
@@ -125,8 +129,8 @@ Summary: "StrReplace …/menu_test.go" → "new_string not found in file"
 | **Tool calls** | How many tools the agent invoked in that turn. |
 | **Harness** | Which agent platform produced the transcript (`cursor`, `claude`, …). |
 | **Prompt** | Truncated user prompt for the turn (when present). |
-| **Summary** | Short `claimed → actual` lines for the notable claims. |
-| **`[ClaimType]` line** | One claim Snitch checked. Format: `[type] claimed → actual (sev N, verifier)`. |
+| **Summary** | Short `flagged → checked` lines for the notable claims. |
+| **Claim block** | One claim Snitch checked: human label + `claim_type`, flagged text, what was checked, verifier/severity (and context/evidence when present). |
 
 #### Verdicts
 
@@ -142,7 +146,7 @@ Summary: "StrReplace …/menu_test.go" → "new_string not found in file"
 | --- | ----- | ---------------- |
 | **0** | verified | Claim matches evidence. |
 | **1** | minor inaccuracy | Soft mismatch; usually hidden in `snitch log` unless interesting. |
-| **2** | partial failure | Real problem, but not always a clear prose lie (often tool/file/shell). → run **warn** |
+| **2** | partial failure | Real problem, but not always a clear false claim (often tool/file/shell). → run **warn** |
 | **3** | false claim | Strong contradiction. → run **fail** |
 
 #### Claim types (common)
@@ -154,9 +158,9 @@ Summary: "StrReplace …/menu_test.go" → "new_string not found in file"
 | **file_created** / **file_modified** / **file_deleted** | A file was created, edited, or removed. |
 | **no_action** | Prose claimed an action, but the turn had no mutating tools. |
 | **stub** | “Done / fully implemented” while written code still has TODO/panic stubs. |
-| **Shell**, **StrReplace**, **Write**, **Delete**, … | Tool-call claims — Snitch checked that the tool’s effect matches disk/output. |
+| **tool_write** / **tool_str_replace** / **tool_delete** / **tool_shell** / … | Tool-call claims — Snitch checked that the tool’s effect matches disk/output. |
 
-`(prose)` after the type means the claim came from assistant text, not only from a tool name.
+`source` is `prose`, `tool`, or `consistency`. Notifications and the menu show a human label (e.g. “No action taken”) plus the flagged sentence when available; `snitch log` and the dashboard detail view also show context and evidence.
 
 #### Verifier (the last field)
 
@@ -168,18 +172,18 @@ Summary: "StrReplace …/menu_test.go" → "new_string not found in file"
 | **consistency** | Same-turn contradictions (e.g. conflicting statements). |
 | **subagent** | Parent turn vs merged subagent tool evidence (Cursor). |
 
-#### `claimed → actual`
+#### Flagged → checked
 
-- **Left** — what the agent said or what the tool implied.
-- **Right** — what Snitch found instead.
+- **Flagged** — the agent sentence/span (or tool summary) Snitch matched.
+- **Checked** — what Snitch found instead (`actual`), plus optional evidence in detail views.
 
-So `"StrReplace …" → "new_string not found in file"` means the edit tool was used, but the new text never appeared on disk.
+So a `tool_str_replace` claim with checked `new_string not found in file` means the edit tool ran, but the new text never appeared on disk.
 
 ### `snitch dashboard`
 
 Interactive TUI with live refresh (`--harness` to filter):
 
-- `tab` — switch runs / lies view
+- `tab` — switch runs / flagged view
 - `v` — cycle verdict filter
 - `t` — cycle claim type filter
 - `/` — search
@@ -187,7 +191,7 @@ Interactive TUI with live refresh (`--harness` to filter):
 
 ### `snitch status`
 
-Shows daemon health and enabled harnesses. Use `--detailed` for lie statistics, per-harness run counts, and recent failures.
+Shows daemon health and enabled harnesses. Use `--detailed` for claim statistics, per-harness run counts, and recent failures.
 
 ### `snitch label` (coming soon)
 
@@ -200,7 +204,7 @@ no daemon needed). Useful for measuring accuracy on your own sessions or
 validating a new harness:
 
 ```bash
-snitch replay ~/.cursor/projects --lies-only
+snitch replay ~/.cursor/projects --false-claims-only
 snitch replay --harness claude ~/.claude/projects
 ```
 

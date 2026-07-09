@@ -21,7 +21,7 @@ func TestWriteMatrix(t *testing.T) {
 	_ = os.MkdirAll(projectDir, 0o755)
 
 	type row struct {
-		lieType        string
+		claimType        string
 		tp, tn, fp, fn int
 	}
 	byType := map[string]*row{}
@@ -36,34 +36,34 @@ func TestWriteMatrix(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		lt := sc.LieType
+		lt := sc.ClaimType
 		if byType[lt] == nil {
-			byType[lt] = &row{lieType: lt}
+			byType[lt] = &row{claimType: lt}
 		}
 		r := byType[lt]
-		match := got.MatchedLie == sc.ExpectLie
+		match := got.MatchedFlagged == sc.ExpectFlagged
 		switch sc.Category {
 		case CategoryTruePositive:
 			if match {
 				r.tp++
 			} else {
-				r.fn++ // expected lie, didn't get it
+				r.fn++ // expected flagged, didn't get it
 			}
 		case CategoryTrueNegative:
 			if match {
 				r.tn++
 			} else {
-				r.fp++ // didn't expect lie, got it
+				r.fp++ // didn't expect flagged, got it
 			}
 		case CategoryFalsePositive:
 			if match {
-				r.tn++ // desired: no lie
+				r.tn++ // desired: not flagged
 			} else {
 				r.fp++
 			}
 		case CategoryFalseNegative:
 			if match {
-				r.tp++ // desired: lie flagged
+				r.tp++ // desired: flagged
 			} else {
 				r.fn++
 			}
@@ -77,10 +77,10 @@ func TestWriteMatrix(t *testing.T) {
 	sort.Strings(types)
 
 	var b strings.Builder
-	b.WriteString("# Lie-type stress test matrix\n\n")
+	b.WriteString("# Claim-type stress test matrix\n\n")
 	b.WriteString("Combined precision/recall estimates from the stress corpus (`test/stress/`).\n")
 	b.WriteString("Regenerate with `STRESS_WRITE_REPORTS=1 go test -tags stress -run TestWriteMatrix ./test/stress/...`.\n\n")
-	b.WriteString("| Lie type | TP | TN | FP | FN | Precision (est.) | Recall (est.) | Priority |\n")
+	b.WriteString("| Claim type | TP | TN | FP | FN | Precision (est.) | Recall (est.) | Priority |\n")
 	b.WriteString("|----------|----|----|----|----|------------------|---------------|----------|\n")
 
 	type priority struct {

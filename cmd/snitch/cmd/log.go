@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fristovic/snitch/internal/claims"
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/fristovic/snitch/internal/severity"
@@ -122,38 +123,25 @@ func printRunDetail(client *ipc.Client, runID string) error {
 		if c.Severity < int(severity.Level2) && c.Verified > 0 {
 			continue
 		}
-		label := c.ClaimType
-		if c.Source == "prose" {
-			label = c.ClaimType + " (prose)"
-		}
-		fmt.Printf("  [%s] %s → %s (sev %d, %s)\n", label, claimText(c), c.Actual, c.Severity, c.Verifier)
+		fmt.Println()
+		fmt.Println(claims.RichDetail(claims.FromRecord(c)))
 	}
 	return nil
 }
 
-func failureSummary(claims []record.Claim) string {
+func failureSummary(runClaims []record.Claim) string {
 	var parts []string
-	for _, c := range claims {
+	for _, c := range runClaims {
 		if c.Severity < int(severity.Level2) && c.Verified > 0 {
 			continue
 		}
-		actual := c.Actual
-		if actual == "" {
-			actual = "(not done)"
+		d := claims.FromRecord(c)
+		if d.Actual == "" {
+			d.Actual = "(not done)"
 		}
-		parts = append(parts, fmt.Sprintf("%q → %q", textutil.TruncateRunes(claimText(c), 80), textutil.TruncateRunes(actual, 80)))
+		parts = append(parts, claims.ArrowSummary(d, 72))
 	}
 	return strings.Join(parts, "; ")
-}
-
-func claimText(c record.Claim) string {
-	if c.Claimed != "" {
-		return c.Claimed
-	}
-	if c.Target != "" {
-		return c.ClaimType + " " + c.Target
-	}
-	return c.ClaimType
 }
 
 func formatPrompt(s string) string {

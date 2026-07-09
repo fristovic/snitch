@@ -141,6 +141,8 @@ func (s *Server) handle(conn net.Conn) {
 			s.handleGetRun(req, writeResp)
 		case "get_claims":
 			s.handleGetClaims(req, writeResp)
+		case "get_latest_top_claim":
+			s.handleGetLatestTopClaim(req, writeResp)
 		case "get_config":
 			result, _ := json.Marshal(s.deps.Config)
 			writeResp(Response{ID: req.ID, Result: result})
@@ -160,21 +162,22 @@ func (s *Server) handle(conn net.Conn) {
 
 func (s *Server) handleStatus(req Request, writeResp func(Response)) {
 	total, _ := s.deps.Store.CountRuns()
-	lieStats, _ := s.deps.Store.LieStats()
+	claimStats, _ := s.deps.Store.ClaimStats()
 	projects, _ := s.deps.Store.CountDistinctProjects()
 	sessions, _ := s.deps.Store.CountDistinctSessions()
 	byHarness, _ := s.deps.Store.RunCountsByHarness()
 	result, _ := json.Marshal(record.DaemonStatus{
-		Running:         true,
-		UptimeSeconds:   int64(time.Since(s.deps.StartTime).Seconds()),
-		Version:         s.deps.Version,
-		TotalRuns:       total,
-		SnitchedRuns:    lieStats.SnitchedRuns,
-		TopLieType:      lieStats.TopClaimType,
-		ProjectsWatched: projects,
-		SessionsSeen:    sessions,
-		RunsByHarness:   byHarness,
-		LieStats:        lieStats,
+		Running:                  true,
+		UptimeSeconds:            int64(time.Since(s.deps.StartTime).Seconds()),
+		Version:                  s.deps.Version,
+		TotalRuns:                total,
+		SnitchedRuns:             claimStats.SnitchedRuns,
+		MostCommonFalseClaimType: claimStats.MostCommonFalseClaimType,
+		TopClaimType:             claimStats.MostCommonFalseClaimType, // ≤0.3.x alias
+		ProjectsWatched:          projects,
+		SessionsSeen:             sessions,
+		RunsByHarness:            byHarness,
+		ClaimStats:               claimStats,
 	})
 	writeResp(Response{ID: req.ID, Result: result})
 }
@@ -237,21 +240,22 @@ func (s *Server) handleGetRun(req Request, writeResp func(Response)) {
 
 func (s *Server) handleGetClaims(req Request, writeResp func(Response)) {
 	var p struct {
-		Limit       int    `json:"limit"`
-		Offset      int    `json:"offset"`
-		ClaimType   string `json:"claim_type"`
-		ProjectPath string `json:"project_path"`
-		SessionID   string `json:"session_id"`
-		Search      string `json:"search"`
-		Since       string `json:"since"`
-		LiesOnly    bool   `json:"lies_only"`
-		MinSeverity int    `json:"min_severity"`
+		Limit           int    `json:"limit"`
+		Offset          int    `json:"offset"`
+		ClaimType       string `json:"claim_type"`
+		ProjectPath     string `json:"project_path"`
+		SessionID       string `json:"session_id"`
+		Search          string `json:"search"`
+		Since           string `json:"since"`
+		FalseClaimsOnly bool   `json:"false_claims_only"`
+		LiesOnly        bool   `json:"lies_only"` // deprecated ≤0.3.x alias
+		MinSeverity     int    `json:"min_severity"`
 	}
 	_ = json.Unmarshal(req.Params, &p)
 	filter := record.ClaimFilter{
 		Limit: p.Limit, Offset: p.Offset, ClaimType: p.ClaimType,
 		ProjectPath: p.ProjectPath, SessionID: p.SessionID, Search: p.Search,
-		LiesOnly: p.LiesOnly, MinSeverity: p.MinSeverity,
+		FalseClaimsOnly: p.FalseClaimsOnly || p.LiesOnly, MinSeverity: p.MinSeverity,
 	}
 	if p.Since != "" {
 		if t, err := time.Parse(time.RFC3339, p.Since); err == nil {
@@ -264,6 +268,16 @@ func (s *Server) handleGetClaims(req Request, writeResp func(Response)) {
 		return
 	}
 	result, _ := json.Marshal(claims)
+	writeResp(Response{ID: req.ID, Result: result})
+}
+
+func (s *Server) handleGetLatestTopClaim(req Request, writeResp func(Response)) {
+	claim, err := s.deps.Store.GetLatestTopFalseClaim()
+	if err != nil {
+		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INTERNAL", Message: err.Error()}})
+		return
+	}
+	result, _ := json.Marshal(claim)
 	writeResp(Response{ID: req.ID, Result: result})
 }
 

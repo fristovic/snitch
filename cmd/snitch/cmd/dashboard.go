@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/fristovic/snitch/internal/claims"
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/platform"
@@ -21,7 +22,7 @@ type viewMode int
 
 const (
 	modeRuns viewMode = iota
-	modeLies
+	modeFlagged
 )
 
 // dashboardHarness filters the dashboard to one harness when set via --harness.
@@ -43,8 +44,8 @@ type dashboardModel struct {
 	cfg    config.TUIConfig
 	status record.DaemonStatus
 	runs   []record.Run
-	lies   []record.LieClaim
-	claims map[string][]record.Claim
+	flaggedClaims []record.ClaimWithRun
+	claimsByRun map[string][]record.Claim
 	filter filterState
 	mode   viewMode
 	cursor int
@@ -82,8 +83,8 @@ func (m *dashboardModel) refresh() error {
 	}
 	_ = json.Unmarshal(stData, &m.status)
 
-	if m.mode == modeLies {
-		params := map[string]any{"lies_only": true, "limit": m.cfg.MaxRunsVisible}
+	if m.mode == modeFlagged {
+		params := map[string]any{"false_claims_only": true, "limit": m.cfg.MaxRunsVisible}
 		if m.filter.ClaimType != "" {
 			params["claim_type"] = m.filter.ClaimType
 		}
@@ -97,9 +98,9 @@ func (m *dashboardModel) refresh() error {
 		if err != nil {
 			return err
 		}
-		_ = json.Unmarshal(data, &m.lies)
-		if m.cursor >= len(m.lies) {
-			m.cursor = max(0, len(m.lies)-1)
+		_ = json.Unmarshal(data, &m.flaggedClaims)
+		if m.cursor >= len(m.flaggedClaims) {
+			m.cursor = max(0, len(m.flaggedClaims)-1)
 		}
 		return nil
 	}
@@ -154,7 +155,7 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			if m.mode == modeRuns {
-				m.mode = modeLies
+				m.mode = modeFlagged
 			} else {
 				m.mode = modeRuns
 			}
@@ -181,8 +182,8 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m dashboardModel) listLen() int {
-	if m.mode == modeLies {
-		return len(m.lies)
+	if m.mode == modeFlagged {
+		return len(m.flaggedClaims)
 	}
 	return len(m.runs)
 }
@@ -195,8 +196,8 @@ func (m dashboardModel) View() string {
 	filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 
 	modeLabel := "runs"
-	if m.mode == modeLies {
-		modeLabel = "lies"
+	if m.mode == modeFlagged {
+		modeLabel = "flagged"
 	}
 	header := headerStyle.Render(fmt.Sprintf("Snitch — %s", modeLabel))
 	stats := fmt.Sprintf("runs=%d snitched=%d projects=%d sessions=%d",
@@ -218,8 +219,8 @@ func (m dashboardModel) View() string {
 	listW, detailW, listRows, _, stack := layoutMetrics(width, height)
 
 	var listBody, detailBody string
-	if m.mode == modeLies {
-		listBody, detailBody = m.viewLies(listW, detailW, listRows)
+	if m.mode == modeFlagged {
+		listBody, detailBody = m.viewFlaggedClaims(listW, detailW, listRows)
 	} else {
 		listBody, detailBody = m.viewRuns(listW, detailW, listRows)
 	}
@@ -233,7 +234,7 @@ func (m dashboardModel) View() string {
 	} else {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPane, " │ ", detailPane)
 	}
-	help := filterStyle.Render("↑/↓ navigate  tab runs/lies  q quit")
+	help := filterStyle.Render("↑/↓ navigate  tab runs/flagged  q quit")
 	return header + "\n" + stats + "\n" + filters + "\n" + body + "\n" + help
 }
 
@@ -290,19 +291,18 @@ func (m dashboardModel) viewRuns(listW, detailW, listRows int) (string, string) 
 	if m.cursor < len(m.runs) {
 		r := m.runs[m.cursor]
 		prompt := textutil.OneLine(formatPrompt(r.Command), detailW*3)
-		detail = fmt.Sprintf("Run %s\nVerdict: %s\nProject: %s\nSession: %s\nHarness: %s\nTool calls: %d  lies: %d\n\nPrompt:\n%s",
+		detail = fmt.Sprintf("Run %s\nVerdict: %s\nProject: %s\nSession: %s\nHarness: %s\nTool calls: %d  flagged: %d\n\nPrompt:\n%s",
 			shortID(r.ID), r.Verdict, textutil.OneLine(r.ProjectPath, detailW), shortID(r.SessionID),
 			orDash(r.Harness), r.ToolCallCount, r.FalseClaims, prompt)
 		if m.client != nil {
-			claims, _ := m.fetchClaims(r.ID)
-			if len(claims) > 0 {
+			runClaims, _ := m.fetchClaims(r.ID)
+			if len(runClaims) > 0 {
 				detail += "\n\nClaims:"
-				for _, c := range claims {
+				for _, c := range runClaims {
 					if c.Severity < 2 && c.Verified > 0 {
 						continue
 					}
-					detail += fmt.Sprintf("\n  [%s] %s → %s",
-						c.ClaimType, textutil.OneLine(c.Claimed, 40), textutil.OneLine(c.Actual, 40))
+					detail += "\n\n" + claims.RichDetail(claims.FromRecord(c))
 				}
 			}
 		}
@@ -310,30 +310,30 @@ func (m dashboardModel) viewRuns(listW, detailW, listRows int) (string, string) 
 	return list.String(), detail
 }
 
-func (m dashboardModel) viewLies(listW, detailW, listRows int) (string, string) {
+func (m dashboardModel) viewFlaggedClaims(listW, detailW, listRows int) (string, string) {
 	var list strings.Builder
-	if len(m.lies) == 0 {
-		list.WriteString("  (no lies)\n")
+	if len(m.flaggedClaims) == 0 {
+		list.WriteString("  (no flagged claims)\n")
 	} else {
-		start, end := visibleWindow(m.cursor, len(m.lies), listRows)
+		start, end := visibleWindow(m.cursor, len(m.flaggedClaims), listRows)
 		for i := start; i < end; i++ {
-			c := m.lies[i]
-			summary := textutil.OneLine(c.Claimed, listW-24)
-			plain := fmt.Sprintf("  %-12s %s %s", c.ClaimType, c.RunCreated.Format("15:04"), summary)
+			c := m.flaggedClaims[i]
+			summary := claims.ShortSummary(claims.FromRecord(c.Claim), listW-20)
+			plain := fmt.Sprintf("  %s %s", c.RunCreated.Format("15:04"), summary)
 			if i == m.cursor {
-				list.WriteString(dashboardSelStyle.Render(textutil.TruncateRunes("> "+c.ClaimType+" "+c.RunCreated.Format("15:04")+" "+summary, listW)) + "\n")
+				list.WriteString(dashboardSelStyle.Render(textutil.TruncateRunes("> "+c.RunCreated.Format("15:04")+" "+summary, listW)) + "\n")
 			} else {
 				list.WriteString(textutil.TruncateRunes(plain, listW) + "\n")
 			}
 		}
 	}
 
-	detail := "(select a lie)"
-	if m.cursor < len(m.lies) {
-		c := m.lies[m.cursor]
-		detail = fmt.Sprintf("Lie: %s\nProject: %s\nSession: %s\nRun: %s\n\nClaimed:\n%s\n\nActual:\n%s\n\nVerifier: %s (sev %d)",
-			c.ClaimType, textutil.OneLine(c.ProjectPath, detailW), shortID(c.SessionID), shortID(c.RunID),
-			textutil.OneLine(c.Claimed, detailW*2), textutil.OneLine(c.Actual, detailW*2), c.Verifier, c.Severity)
+	detail := "(select a claim)"
+	if m.cursor < len(m.flaggedClaims) {
+		c := m.flaggedClaims[m.cursor]
+		detail = fmt.Sprintf("Project: %s\nSession: %s\nRun: %s\n\n%s",
+			textutil.OneLine(c.ProjectPath, detailW), shortID(c.SessionID), shortID(c.RunID),
+			claims.RichDetail(claims.FromRecord(c.Claim)))
 	}
 	return list.String(), detail
 }
@@ -379,10 +379,10 @@ func runListSummary(r record.Run, max int) string {
 }
 
 func (m *dashboardModel) fetchClaims(runID string) ([]record.Claim, error) {
-	if m.claims == nil {
-		m.claims = make(map[string][]record.Claim)
+	if m.claimsByRun == nil {
+		m.claimsByRun = make(map[string][]record.Claim)
 	}
-	if c, ok := m.claims[runID]; ok {
+	if c, ok := m.claimsByRun[runID]; ok {
 		return c, nil
 	}
 	data, err := m.client.Call("get_run", map[string]string{"id": runID})
@@ -393,7 +393,7 @@ func (m *dashboardModel) fetchClaims(runID string) ([]record.Claim, error) {
 		Claims []record.Claim `json:"claims"`
 	}
 	_ = json.Unmarshal(data, &resp)
-	m.claims[runID] = resp.Claims
+	m.claimsByRun[runID] = resp.Claims
 	return resp.Claims, nil
 }
 
@@ -413,7 +413,7 @@ func cycleVerdictFilter(f filterState) filterState {
 }
 
 func cycleClaimTypeFilter(f filterState) filterState {
-	types := []string{"", "test_pass", "committed", "pushed", "file_created", "file_modified", "no_action"}
+	types := append([]string{""}, claims.AllFilterTypes()...)
 	for i, t := range types {
 		if f.ClaimType == t {
 			f.ClaimType = types[(i+1)%len(types)]
@@ -447,7 +447,7 @@ func promptSearch() string {
 
 var dashboardCmd = &cobra.Command{
 	Use:   "dashboard",
-	Short: "Interactive lie-detector TUI",
+	Short: "Interactive claim-verifier TUI",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if os.Getenv("TERM") == "" {
 			return fmt.Errorf("dashboard requires a terminal")

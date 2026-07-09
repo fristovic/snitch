@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/fristovic/snitch/internal/verify/verifiers"
 )
 
 const maxClaimContextRunes = 500
@@ -144,4 +146,24 @@ func truncateRunes(s string, n int) string {
 		return string(runes[:n])
 	}
 	return string(runes[:n-1]) + "…"
+}
+
+// enrichClaimWindows fills Sentence/Context from Quote when missing
+// (e.g. consistency claims that only store Quote).
+func enrichClaimWindows(text string, claims []verifiers.Claim) {
+	if text == "" {
+		return
+	}
+	for i := range claims {
+		c := &claims[i]
+		if c.Quote == "" || c.Sentence != "" {
+			continue
+		}
+		idx := strings.Index(text, c.Quote)
+		if idx < 0 {
+			c.Sentence = c.Quote
+			continue
+		}
+		c.Sentence, c.Context = expandClaimWindow(text, idx, idx+len(c.Quote))
+	}
 }

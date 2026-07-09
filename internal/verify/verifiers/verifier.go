@@ -25,7 +25,44 @@ const (
 	ClaimSelfContradiction ClaimType = "self_contradiction"
 	ClaimCountMismatch     ClaimType = "count_mismatch"
 	ClaimNegationViolation ClaimType = "negation_violation"
+
+	ClaimToolWrite      ClaimType = "tool_write"
+	ClaimToolStrReplace ClaimType = "tool_str_replace"
+	ClaimToolDelete     ClaimType = "tool_delete"
+	ClaimToolRead       ClaimType = "tool_read"
+	ClaimToolGlob       ClaimType = "tool_glob"
+	ClaimToolShell      ClaimType = "tool_shell"
+	ClaimToolTask       ClaimType = "tool_task"
 )
+
+// toolNameToType maps canonical harness tool names to claim_type IDs.
+var toolNameToType = map[string]ClaimType{
+	"Write":      ClaimToolWrite,
+	"StrReplace": ClaimToolStrReplace,
+	"Delete":     ClaimToolDelete,
+	"Read":       ClaimToolRead,
+	"Glob":       ClaimToolGlob,
+	"Shell":      ClaimToolShell,
+	"Task":       ClaimToolTask,
+}
+
+// ToolNameToClaimType maps a canonical tool name to tool_*.
+func ToolNameToClaimType(toolName string) (ClaimType, bool) {
+	t, ok := toolNameToType[toolName]
+	return t, ok
+}
+
+// IsLocalActionType reports claim types that imply the agent mutated local state.
+func IsLocalActionType(t ClaimType) bool {
+	switch t {
+	case ClaimCommitted, ClaimPushed,
+		ClaimFileCreated, ClaimFileModified, ClaimFileDeleted,
+		ClaimCommandRan, ClaimCommandSucceeded, ClaimStub:
+		return true
+	default:
+		return false
+	}
+}
 
 // Claim is a prose or tool-derived claim to verify.
 type Claim struct {
@@ -104,21 +141,19 @@ type Verifier interface {
 }
 
 // ToolCallToClaim maps a tool call (already normalized to canonical names by
-// the harness parser) to a verifiable claim. Tool names are canonical
-// regardless of which harness produced them.
+// the harness parser) to a verifiable claim. claim_type uses tool_* snake_case.
 func ToolCallToClaim(tc transcript.ToolCall) (Claim, bool) {
-	switch tc.Name {
-	case "Write", "StrReplace", "Delete", "Read", "Glob", "Shell", "Task":
-		return Claim{
-			Type:        ClaimType(tc.Name),
-			Source:      "tool",
-			Target:      tc.Target,
-			Description: tc.Name + " " + tc.Target,
-			Input:       rawToMap(tc.Input),
-		}, true
-	default:
+	claimType, ok := ToolNameToClaimType(tc.Name)
+	if !ok {
 		return Claim{}, false
 	}
+	return Claim{
+		Type:        claimType,
+		Source:      "tool",
+		Target:      tc.Target,
+		Description: tc.Name + " " + tc.Target,
+		Input:       rawToMap(tc.Input),
+	}, true
 }
 
 func rawToMap(in map[string]json.RawMessage) map[string]any {

@@ -95,7 +95,7 @@ func TestPipelineParseVerifyStore(t *testing.T) {
 	}
 }
 
-func TestPipelineTestPassLieEndToEnd(t *testing.T) {
+func TestPipelineTestPassFalseClaimEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	store, err := record.Open(dir)
 	if err != nil {
@@ -115,7 +115,7 @@ func TestPipelineTestPassLieEndToEnd(t *testing.T) {
 	verifyEngine.Start()
 
 	turn := transcript.TurnCompleted{
-		RunID:         "run-lie-e2e",
+		RunID:         "run-false-claim-e2e",
 		ProjectPath:   t.TempDir(),
 		UserText:      "run tests",
 		AssistantText: "All tests pass. You're good to go.",
@@ -130,20 +130,20 @@ func TestPipelineTestPassLieEndToEnd(t *testing.T) {
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		run, _ := store.GetRunByID("run-lie-e2e")
+		run, _ := store.GetRunByID("run-false-claim-e2e")
 		if run != nil && run.Verdict == record.VerdictFail {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	run, _ := store.GetRunByID("run-lie-e2e")
+	run, _ := store.GetRunByID("run-false-claim-e2e")
 	if run == nil || run.Verdict != record.VerdictFail {
 		t.Fatalf("expected fail verdict, got %+v", run)
 	}
 
-	claims, _ := store.GetClaims(record.ClaimFilter{LiesOnly: true, ClaimType: "test_pass"})
+	claims, _ := store.GetClaims(record.ClaimFilter{FalseClaimsOnly: true, ClaimType: "test_pass"})
 	if len(claims) == 0 {
-		t.Fatal("expected test_pass lie via get_claims filter")
+		t.Fatal("expected test_pass false claim via get_claims filter")
 	}
 }

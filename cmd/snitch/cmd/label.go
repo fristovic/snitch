@@ -53,11 +53,11 @@ var (
 	missedActual  string
 )
 
-// labelMissedCmd reports a false negative: the agent lied about something
+// labelMissedCmd reports a false negative: the agent made a false claim
 // Snitch missed. These are the highest-value training examples.
 var labelMissedCmd = &cobra.Command{
 	Use:   "missed --claimed \"...\" --actual \"...\"",
-	Short: "Report a lie Snitch missed (false negative)",
+	Short: "Report a claim Snitch missed (false negative)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if missedClaimed == "" || missedActual == "" {
 			return fmt.Errorf("--claimed and --actual are required")

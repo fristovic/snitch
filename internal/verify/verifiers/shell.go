@@ -22,7 +22,7 @@ func NewShellVerifier(cfg config.ShellVerifierConfig) *ShellVerifier {
 func (v *ShellVerifier) Name() string { return "shell" }
 
 func (v *ShellVerifier) CanHandle(c Claim) bool {
-	return c.Source == "tool" && c.Type == "Shell"
+	return c.Source == "tool" && c.Type == ClaimToolShell
 }
 
 func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {

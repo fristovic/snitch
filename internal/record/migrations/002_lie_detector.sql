@@ -1,4 +1,5 @@
--- Lie detector schema upgrades for existing databases.
+-- Claim-verifier schema upgrades for existing databases.
+-- (Filename kept as 002_lie_detector.sql for migration ordering on existing installs.)
 ALTER TABLE claims ADD COLUMN claim_type TEXT NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN source TEXT NOT NULL DEFAULT 'prose';
 UPDATE claims SET claim_type = tool_call WHERE claim_type = '' AND tool_call IS NOT NULL AND tool_call != '';

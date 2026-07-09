@@ -16,7 +16,7 @@ body:
       label: Request type
       options:
         - New claim type
-        - Improve existing pattern (catch more true lies)
+        - Improve existing pattern (catch more real false claims)
         - Tighten existing pattern (reduce false positives)
     validations:
       required: true

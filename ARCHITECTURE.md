@@ -1,10 +1,10 @@
 # Snitch Architecture
 
-Snitch is a **lie detector** for AI coding agents. It extracts claims from assistant **prose**, checks them against **evidence** (tool calls + captured output + filesystem + git + consistency), and stores results locally.
+Snitch is a **claim verifier** for AI coding agents. It extracts claims from assistant **prose**, checks them against **evidence** (tool calls + captured output + filesystem + git + consistency), and stores results locally.
 
 **Multi-harness:** Snitch ingests transcripts from five agents — Cursor, Claude Code, Codex, Pi (all JSONL via fsnotify) and OpenCode (SQLite via polling). Each harness provides a parser/reader, a path resolver, a shell-output resolver, and a tool-name normalization map, bundled in a `harness.Descriptor` registry. The verification pipeline is harness-agnostic: every harness normalizes its raw tool names to a canonical internal vocabulary at parse time.
 
-**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires Notification Center alerts on new lies (app-bundle icon), and exposes **View Details…** / **History ▸ Open Dashboard…**. The CLI (`snitch`) is for history, debugging, and power users.
+**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires Notification Center alerts on new flagged claims (app-bundle icon), and exposes **View Details…** / **History ▸ Open Dashboard…**. The CLI (`snitch`) is for history, debugging, and power users.
 
 ## Data flow
 
@@ -25,9 +25,9 @@ Agent transcripts (Cursor/Claude/Codex/Pi JSONL via fsnotify,
         │              verifiers → SQLite (+ turn snapshots)
         │                    │
         │                    ▼
-        │              run.completed (+ top-lie fields)
+        │              run.completed (+ top-claim fields)
         ▼
- snitchd IPC ◄──── Snitch Bar (subscribe, status, get_claims, notify.Deliver)
+ snitchd IPC ◄──── Snitch Bar (subscribe, status, get_latest_top_claim, notify.Deliver)
         │
         ▼
  snitch log / dashboard (CLI)
@@ -43,9 +43,11 @@ Agent transcripts (Cursor/Claude/Codex/Pi JSONL via fsnotify,
 | `internal/verify` | Prose extractor + consistency + contradiction + tool verifiers (harness-agnostic; shell output via per-harness resolver) |
 | `internal/record` | SQLite runs + claims + user feedback labels |
 | `internal/ipc` | Unix socket RPC for CLI and Snitch Bar (incl. `set_label` feedback) |
-| `internal/notify` | macOS Notification Center alerts delivered by Snitch Bar (CGO) |
+| `internal/claims` | Claim-type labels + display helpers (`FromRecord`, Flagged/Checked formatting) |
+| `internal/shellpreview` | One-line shell command extraction for UI previews |
+| `internal/notify` | macOS Notification Center alerts delivered by Snitch Bar (CGO + `UNUserNotificationCenter`) |
 | `cmd/snitchd` | Daemon: watcher, capture, verify, IPC |
-| `cmd/snitchbar` | Menu bar app: daemon lifecycle, tray UI, notifications, lie alerts |
+| `cmd/snitchbar` | Menu bar app: daemon lifecycle, tray UI, notifications, claim alerts |
 | `cmd/snitch` | CLI + TUI (`doctor`, `uninstall`) |
 
 ## Menu bar flow
@@ -54,7 +56,7 @@ Agent transcripts (Cursor/Claude/Codex/Pi JSONL via fsnotify,
 2. Snitch Bar starts bundled `snitchd` (or finds it on PATH) and connects via IPC.
 3. Menu shows **Snitching...**, **Start Snitching**, or **Stop Snitching** depending on state.
 4. On `subscribe` `run.completed` events, Snitch Bar may call `notify.Deliver` (Notification Center, Snitch app icon) and, for fails, enter alert state.
-5. **View Details…** loads the latest lie via IPC (`get_claims`) and opens `snitch log --run <id>` in Terminal.
+5. **View Details…** loads the latest flagged claim via IPC (`get_claims`) and opens `snitch log --run <id>` in Terminal.
 
 ## Evidence enrichment pipeline
 
@@ -70,9 +72,9 @@ Turn snapshots persist `payload_json`, `start_head`, `end_head`, and `file_manif
 
 ## Data flywheel (coming soon)
 
-Opt-in community labeling (correct / incorrect feedback, missed-lie reports) is planned. Labels store on the `runs` table in `~/.snitch/snitch.db`. When sharing is enabled (`telemetry.enabled` + share flag), sync may send the claim sentence, capped surrounding context, claimed→actual, and metadata (claim type, harness, model, verdict, label, sentence hash) — never user prompts, code, paths, or full transcripts. The Snitch Bar labeling UI stays behind `flywheelUIEnabled` until the training API ships.
+Opt-in community labeling (correct / incorrect feedback, missed-claim reports) is planned. Labels store on the `runs` table in `~/.snitch/snitch.db`. When sharing is enabled (`telemetry.enabled` + share flag), sync may send the claim sentence, capped surrounding context, claimed→actual, and metadata (claim type, harness, model, verdict, label, sentence hash) — never user prompts, code, paths, or full transcripts. The Snitch Bar labeling UI stays behind `flywheelUIEnabled` until the training API ships.
 
-## Prose lie detection
+## Prose claim verification
 
 `verify.ExtractProseClaims` uses deterministic regex patterns (high precision, low recall).
 
@@ -85,20 +87,20 @@ Opt-in community labeling (correct / incorrect feedback, missed-lie reports) is 
 
 `verifiers.ConsistencyVerifier` checks same-turn internal contradictions (`self_contradiction`, `count_mismatch`, `negation_violation`) with no external oracle.
 
-Tool-call verifiers (`file`, `shell`, `subagent`) provide secondary evidence for actions the agent actually executed. Each harness normalizes its raw tool names to canonical names (e.g. Claude `Bash`→`Shell`, Codex `apply_patch`→`StrReplace`) at parse time, so verifiers only ever see the canonical vocabulary.
+Tool-call verifiers (`file`, `shell`, `subagent`) provide secondary evidence for actions the agent actually executed. Each harness normalizes its raw tool names to canonical names (e.g. Claude `Bash`→`Shell`, Codex `apply_patch`→`StrReplace`) at parse time. Stored `claim_type` values for those rows use snake_case `tool_*` IDs (`tool_write`, `tool_shell`, …); UI surfaces show human labels via `internal/claims`.
 
 ## Schema
 
 **runs** — one row per agent turn: verdict, severity, session, project, command.
 
-**claims** — one row per verified claim: `claim_type`, `source` (`prose`|`tool`|`consistency`), claimed text, actual evidence, severity.
+**claims** — one row per verified claim: snake_case `claim_type` (prose patterns or `tool_*`), `source` (`prose`|`tool`|`consistency`), claimed / sentence / context, actual evidence, severity.
 
 ## IPC methods
 
-- `status` — daemon health + lie stats
+- `status` — daemon health + claim stats
 - `get_runs` — filtered run list
 - `get_run` — run + claims
-- `get_claims` — lie query with filters
+- `get_claims` — claim query with filters
 - `get_config` / `set_config` — read and update daemon config
 - `set_label` — record a user's correct/incorrect verdict on a run
 - `add_missed_claim` — record a user-reported false negative

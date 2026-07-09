@@ -28,7 +28,7 @@ func TestContradictionTestPassWithFailedResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3 lie, got %+v", res)
+		t.Fatalf("expected L3 false claim, got %+v", res)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestContradictionTestPassNoRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3 lie, got %+v", res)
+		t.Fatalf("expected L3 false claim, got %+v", res)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestContradictionStubDetection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected stub lie, got %+v", res)
+		t.Fatalf("expected stub false claim, got %+v", res)
 	}
 }
 
@@ -141,7 +141,7 @@ func TestContradictionNoAction(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3 no_action lie, got %+v", res)
+		t.Fatalf("expected L3 no_action false claim, got %+v", res)
 	}
 }
 

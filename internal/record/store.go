@@ -179,16 +179,16 @@ func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
 	}
 	rows, err := s.db.Query(`
 		SELECT r.id, r.harness, r.model, r.label_verdict, r.label_timestamp, r.verdict,
-		       (SELECT c.claim_type FROM claims c WHERE c.run_id = r.id
-		        ORDER BY c.severity DESC LIMIT 1) AS top_claim_type,
-		       (SELECT c.claimed FROM claims c WHERE c.run_id = r.id
-		        ORDER BY c.severity DESC LIMIT 1) AS top_claimed,
-		       (SELECT c.actual FROM claims c WHERE c.run_id = r.id
-		        ORDER BY c.severity DESC LIMIT 1) AS top_actual,
-		       (SELECT COALESCE(NULLIF(c.claim_sentence, ''), c.claimed) FROM claims c WHERE c.run_id = r.id
-		        ORDER BY c.severity DESC LIMIT 1) AS top_sentence,
-		       (SELECT COALESCE(c.claim_context, '') FROM claims c WHERE c.run_id = r.id
-		        ORDER BY c.severity DESC LIMIT 1) AS top_context
+		       (SELECT c.claim_type FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_claim_type,
+		       (SELECT c.claimed FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_claimed,
+		       (SELECT c.actual FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_actual,
+		       (SELECT COALESCE(NULLIF(c.claim_sentence, ''), c.claimed) FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_sentence,
+		       (SELECT COALESCE(c.claim_context, '') FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_context
 		FROM runs r
 		WHERE r.label_shared = 1 AND r.label_synced = 0 AND r.label_verdict != ''
 		ORDER BY r.label_timestamp ASC
@@ -497,13 +497,13 @@ func (s *Store) GetClaimsByRun(runID string) ([]Claim, error) {
 }
 
 // GetClaims returns claims matching filter, joined with run metadata.
-func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
+func (s *Store) GetClaims(filter ClaimFilter) ([]ClaimWithRun, error) {
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = 50
 	}
 	minSev := filter.MinSeverity
-	if filter.LiesOnly && minSev < 2 {
+	if filter.FalseClaimsOnly && minSev < 2 {
 		minSev = 2
 	}
 	q := `
@@ -519,7 +519,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 		q += " AND c.severity >= ?"
 		args = append(args, minSev)
 	}
-	if filter.LiesOnly {
+	if filter.FalseClaimsOnly {
 		q += " AND c.verified = -1"
 	}
 	if filter.ClaimType != "" {
@@ -543,7 +543,9 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 		pat := "%" + filter.Search + "%"
 		args = append(args, pat, pat, pat)
 	}
-	q += " ORDER BY r.created_at DESC LIMIT ? OFFSET ?"
+	// Newest run first. Severity ordering for menu preview is
+	// GetLatestTopFalseClaim — keep list pagination run-recency based.
+	q += " ORDER BY r.created_at DESC, c.id DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, filter.Offset)
 
 	rows, err := s.db.Query(q, args...)
@@ -552,9 +554,9 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 	}
 	defer rows.Close()
 
-	var out []LieClaim
+	var out []ClaimWithRun
 	for rows.Next() {
-		var lc LieClaim
+		var lc ClaimWithRun
 		var ev, created, runCreated, verdict string
 		if err := rows.Scan(&lc.ID, &lc.RunID, &lc.ClaimType, &lc.Source, &lc.Target, &lc.Claimed,
 			&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
@@ -570,9 +572,40 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 	return out, rows.Err()
 }
 
-// LieStats returns aggregate lie statistics.
-func (s *Store) LieStats() (LieStats, error) {
-	stats := LieStats{ByClaimType: make(map[string]int)}
+// GetLatestTopFalseClaim returns the highest-severity false claim from the
+// most recent run that has one. Used by Snitch Bar menu preview (limit=1).
+func (s *Store) GetLatestTopFalseClaim() (*ClaimWithRun, error) {
+	row := s.db.QueryRow(`
+		SELECT c.id, c.run_id, c.claim_type, c.source, c.target, c.claimed, c.actual,
+		       COALESCE(c.claim_sentence, ''), COALESCE(c.claim_context, ''),
+		       c.verified, c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
+		       r.project_path, r.session_id, r.command, r.created_at, r.verdict
+		FROM claims c
+		JOIN runs r ON r.id = c.run_id
+		WHERE c.verified = -1
+		ORDER BY r.created_at DESC, c.severity DESC, c.id DESC
+		LIMIT 1`)
+	var lc ClaimWithRun
+	var ev, created, runCreated, verdict string
+	err := row.Scan(&lc.ID, &lc.RunID, &lc.ClaimType, &lc.Source, &lc.Target, &lc.Claimed,
+		&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
+		&lc.ProjectPath, &lc.SessionID, &lc.RunCommand, &runCreated, &verdict)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(ev), &lc.Evidence)
+	lc.CreatedAt, _ = time.Parse(time.RFC3339, created)
+	lc.RunCreated, _ = time.Parse(time.RFC3339, runCreated)
+	lc.RunVerdict = Verdict(verdict)
+	return &lc, nil
+}
+
+// ClaimStats returns aggregate false-claim statistics.
+func (s *Store) ClaimStats() (ClaimStats, error) {
+	stats := ClaimStats{ByClaimType: make(map[string]int)}
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM runs`).Scan(&stats.TotalRuns)
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM runs WHERE verdict IN ('fail','warn')`).Scan(&stats.SnitchedRuns)
 
@@ -591,8 +624,9 @@ func (s *Store) LieStats() (LieStats, error) {
 			return stats, err
 		}
 		stats.ByClaimType[t] = n
-		if stats.TopClaimType == "" {
-			stats.TopClaimType = t
+		if stats.MostCommonFalseClaimType == "" {
+			stats.MostCommonFalseClaimType = t
+			stats.TopClaimType = t // ≤0.3.x alias
 		}
 	}
 	return stats, rows.Err()

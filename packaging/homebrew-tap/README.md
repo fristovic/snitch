@@ -37,7 +37,7 @@ snitch start
 snitch doctor
 ```
 
-Snitch Bar manages lie detection. Use **Start Snitching** / **Stop Snitching** in the menu bar — no `brew services` step.
+Snitch Bar manages claim verification. Use **Start Snitching** / **Stop Snitching** in the menu bar — no `brew services` step.
 
 ## Uninstall
 

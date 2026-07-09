@@ -14,8 +14,8 @@ See [docs/extending-patterns.md](../docs/extending-patterns.md). Precision over 
 - [ ] Pattern added to the `claimPatterns` registry (not a bespoke extraction loop)
 - [ ] At least 3 `Examples` and 2 `Negatives`, and `TestClaimPatternRegistry` passes
 - [ ] No overlap with an existing pattern (extended it instead, if close)
-- [ ] Replay run over real sessions attached below (`snitch replay <dir> --lies-only`) with zero false positives
-- [ ] New claim types: verifier support + contradiction test + README "Lie types" row
+- [ ] Replay run over real sessions attached below (`snitch replay <dir> --false-claims-only`) with zero false positives
+- [ ] New claim types: verifier support + contradiction test + README "Claim types" row
 
 <details><summary>Replay output</summary>
 

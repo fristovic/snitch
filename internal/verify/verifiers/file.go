@@ -19,7 +19,7 @@ func (v *FileVerifier) CanHandle(c Claim) bool {
 		return false
 	}
 	switch c.Type {
-	case "Write", "StrReplace", "Delete", "Read", "Glob":
+	case ClaimToolWrite, ClaimToolStrReplace, ClaimToolDelete, ClaimToolRead, ClaimToolGlob:
 		return true
 	default:
 		return false
@@ -37,7 +37,7 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	}
 
 	switch c.Type {
-	case "Delete":
+	case ClaimToolDelete:
 		_, err := os.Stat(path)
 		if os.IsNotExist(err) {
 			r.Accurate = true
@@ -49,7 +49,7 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		r.GroundTruth = "file still exists"
 		return r, nil
 
-	case "Read":
+	case ClaimToolRead:
 		if _, err := os.Stat(path); err != nil {
 			r.Accurate = false
 			r.Severity = severity.Level1
@@ -61,7 +61,7 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		r.Evidence = []string{path}
 		return r, nil
 
-	case "Glob":
+	case ClaimToolGlob:
 		pattern := c.Target
 		if pattern == "" {
 			if s, ok := c.Input["glob_pattern"].(string); ok {
@@ -76,7 +76,7 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		r.GroundTruth = "glob matched " + strconv.Itoa(len(matches)) + " paths"
 		return r, nil
 
-	case "StrReplace":
+	case ClaimToolStrReplace:
 		info, err := os.Stat(path)
 		if err != nil {
 			r.Accurate = false
@@ -105,7 +105,7 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		r.Evidence = []string{path}
 		return r, nil
 
-	case "Write":
+	case ClaimToolWrite:
 		info, err := os.Stat(path)
 		if err != nil {
 			r.Accurate = false

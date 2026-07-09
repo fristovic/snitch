@@ -4,30 +4,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fristovic/snitch/internal/claims"
 	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/record"
 )
 
-func TestFormatNotification(t *testing.T) {
-	title, body := FormatNotification("test_pass", "all tests pass", "no test command ran", "/Users/me/proj")
-	if title != "Snitch — test_pass (proj)" {
+func TestFormatNotificationFields(t *testing.T) {
+	title, body := FormatNotificationFields(claims.DisplayFields{
+		ClaimType: "test_pass",
+		Claimed:   "all tests pass",
+		Actual:    "no test command ran",
+	}, "/Users/me/proj")
+	if title != "Snitch — Tests passed (proj)" {
 		t.Fatalf("title: %q", title)
 	}
 	if body != `"all tests pass" → no test command ran` {
 		t.Fatalf("body: %q", body)
-	}
-}
-
-func TestTopLieClaim(t *testing.T) {
-	claims := []record.Claim{
-		{ClaimType: "stub", Verified: 1, Severity: 1},
-		{ClaimType: "test_pass", Verified: -1, Severity: 3},
-		{ClaimType: "committed", Verified: -1, Severity: 2},
-	}
-	top := TopLieClaim(claims)
-	if top == nil || top.ClaimType != "test_pass" {
-		t.Fatalf("got %+v", top)
 	}
 }
 
@@ -47,8 +40,8 @@ func TestRateLimiter(t *testing.T) {
 func TestDeliverDisabled(t *testing.T) {
 	resetLimiter()
 	Deliver(event.RunVerifiedPayload{
-		Verdict:      record.VerdictFail,
-		TopClaimType: "test_pass",
+		Verdict:  record.VerdictFail,
+		TopClaim: &event.TopFalseClaim{ClaimType: "test_pass"},
 	}, config.NotificationsConfig{Enabled: false})
 }
 
@@ -62,7 +55,7 @@ func TestDeliverNoTopClaim(t *testing.T) {
 func TestDeliverWarnGated(t *testing.T) {
 	resetLimiter()
 	Deliver(event.RunVerifiedPayload{
-		Verdict:      record.VerdictWarn,
-		TopClaimType: "test_pass",
+		Verdict:  record.VerdictWarn,
+		TopClaim: &event.TopFalseClaim{ClaimType: "test_pass"},
 	}, config.NotificationsConfig{Enabled: true, OnWarn: false})
 }

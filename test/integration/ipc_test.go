@@ -22,7 +22,7 @@ func ipcTestSocket(t *testing.T, name string) string {
 	return filepath.Join(t.TempDir(), name+".sock")
 }
 
-func TestIPCStatusAndLieStats(t *testing.T) {
+func TestIPCStatusAndClaimStats(t *testing.T) {
 	dir := t.TempDir()
 	store, err := record.Open(dir)
 	if err != nil {
@@ -66,15 +66,15 @@ func TestIPCStatusAndLieStats(t *testing.T) {
 	if st.SnitchedRuns != 1 {
 		t.Fatalf("expected snitched=1, got %d", st.SnitchedRuns)
 	}
-	if st.LieStats.ByClaimType["test_pass"] != 1 {
-		t.Fatalf("expected test_pass lie, got %+v", st.LieStats.ByClaimType)
+	if st.ClaimStats.ByClaimType["test_pass"] != 1 {
+		t.Fatalf("expected test_pass false claim, got %+v", st.ClaimStats.ByClaimType)
 	}
 
-	claimsData, err := client.Call("get_claims", map[string]any{"lies_only": true})
+	claimsData, err := client.Call("get_claims", map[string]any{"false_claims_only": true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var claims []record.LieClaim
+	var claims []record.ClaimWithRun
 	if err := json.Unmarshal(claimsData, &claims); err != nil {
 		t.Fatal(err)
 	}

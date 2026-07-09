@@ -237,7 +237,7 @@ func TestInsertClaims(t *testing.T) {
 	defer store.Close()
 	_ = store.InsertRun(Run{ID: "r1", Verdict: VerdictPass, DeviceID: "d"})
 	err := store.InsertClaims([]Claim{{
-		RunID: "r1", ClaimType: "Write", Source: "tool", Target: "a.go", Claimed: "Write a.go",
+		RunID: "r1", ClaimType: "tool_write", Source: "tool", Target: "a.go", Claimed: "Write a.go",
 		Verified: 1, Severity: 0, CreatedAt: time.Now(),
 	}})
 	if err != nil {
@@ -249,7 +249,7 @@ func TestInsertClaims(t *testing.T) {
 	}
 }
 
-func TestLieStats(t *testing.T) {
+func TestClaimStats(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := Open(dir)
 	defer store.Close()
@@ -259,7 +259,7 @@ func TestLieStats(t *testing.T) {
 		RunID: "r1", ClaimType: "test_pass", Source: "prose", Claimed: "tests pass",
 		Verified: -1, Severity: 3,
 	}})
-	stats, err := store.LieStats()
+	stats, err := store.ClaimStats()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,6 +268,24 @@ func TestLieStats(t *testing.T) {
 	}
 	if stats.ByClaimType["test_pass"] != 1 {
 		t.Fatalf("by type: %+v", stats.ByClaimType)
+	}
+}
+
+func TestGetLatestTopFalseClaim(t *testing.T) {
+	dir := t.TempDir()
+	store, _ := Open(dir)
+	defer store.Close()
+	_ = store.InsertRun(Run{ID: "r1", ProjectPath: "/proj", SessionID: "s1", Verdict: VerdictFail, DeviceID: "d"})
+	_ = store.InsertClaims([]Claim{
+		{RunID: "r1", ClaimType: "file_modified", Source: "prose", Claimed: "updated", Verified: -1, Severity: 2},
+		{RunID: "r1", ClaimType: "no_action", Source: "prose", Claimed: "updated", ClaimSentence: "I updated README.", Verified: -1, Severity: 3},
+	})
+	got, err := store.GetLatestTopFalseClaim()
+	if err != nil || got == nil {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+	if got.ClaimType != "no_action" || got.Severity != 3 {
+		t.Fatalf("expected top severity no_action, got %+v", got)
 	}
 }
 
@@ -280,7 +298,7 @@ func TestGetClaimsFilter(t *testing.T) {
 		RunID: "r1", ClaimType: "committed", Source: "prose", Claimed: "committed",
 		Verified: -1, Severity: 3,
 	}})
-	claims, err := store.GetClaims(ClaimFilter{LiesOnly: true, ClaimType: "committed"})
+	claims, err := store.GetClaims(ClaimFilter{FalseClaimsOnly: true, ClaimType: "committed"})
 	if err != nil || len(claims) != 1 {
 		t.Fatalf("claims=%+v err=%v", claims, err)
 	}

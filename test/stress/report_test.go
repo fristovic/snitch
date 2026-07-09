@@ -46,7 +46,7 @@ func TestWriteReports(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			match := got.MatchedLie == sc.ExpectLie
+			match := got.MatchedFlagged == sc.ExpectFlagged
 			line := formatReportLine(sc, got, match)
 			switch sc.Category {
 			case CategoryFalsePositive:
@@ -59,7 +59,7 @@ func TestWriteReports(t *testing.T) {
 				tn = append(tn, line)
 			}
 		}
-		header := "| Case | Status | Expect lie | Prose | Actual | Root cause |\n|------|--------|------------|-------|--------|------------|\n"
+		header := "| Case | Status | Expect flagged | Prose | Actual | Root cause |\n|------|--------|------------|-------|--------|------------|\n"
 		body := fmt.Sprintf("# Stress report: %s\n\n## False positives\n\n%s%s\n\n## False negatives\n\n%s%s\n\n## True positives\n\n%s%s\n\n## True negatives\n\n%s%s\n",
 			fam.name,
 			header, strings.Join(fp, "\n"),
@@ -77,17 +77,17 @@ func formatReportLine(sc StressCase, got CaseResult, match bool) string {
 	if !match {
 		status = "**MISMATCH**"
 	}
-	actual := "no lie"
-	if got.MatchedLie {
-		actual = "lie flagged"
-		if got.LieClaim != nil {
-			actual = fmt.Sprintf("lie: %q → %q", got.LieClaim.Claimed, got.LieClaim.Actual)
+	actual := "not flagged"
+	if got.MatchedFlagged {
+		actual = "flagged"
+		if got.MatchedClaim != nil {
+			actual = fmt.Sprintf("flagged: %q → %q", got.MatchedClaim.Claimed, got.MatchedClaim.Actual)
 		}
 	}
 	snippet := sc.AssistantText
 	if len(snippet) > 60 {
 		snippet = snippet[:57] + "..."
 	}
-	return fmt.Sprintf("| %s | %s | expect_lie=%v | %s | %s | %s |",
-		sc.Name, status, sc.ExpectLie, snippet, actual, sc.Notes)
+	return fmt.Sprintf("| %s | %s | expect_flagged=%v | %s | %s | %s |",
+		sc.Name, status, sc.ExpectFlagged, snippet, actual, sc.Notes)
 }

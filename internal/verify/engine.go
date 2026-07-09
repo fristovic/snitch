@@ -17,7 +17,7 @@ import (
 
 var reGenericActionProse = regexp.MustCompile(`(?i)\b(?:i\s+)?(?:modified|updated|created|committed|pushed|deleted|removed|wrote|added)\b`)
 
-// Engine runs the lie-detection verification pipeline.
+// Engine runs the claim-verification pipeline.
 type Engine struct {
 	bus           *event.Bus
 	store         *record.Store
@@ -154,8 +154,7 @@ func (e *Engine) process(ev event.Event) {
 
 	maxSev := severity.Level0
 	verified, falseClaims := 0, 0
-	var topClaimType, topClaimed, topActual string
-	topClaimSev := -1
+	var inserted []record.Claim
 
 	for _, claim := range claims {
 		best := verifiers.Result{Claim: claim, Severity: severity.Level(-1)}
@@ -212,15 +211,7 @@ func (e *Engine) process(ev event.Event) {
 		if err := e.store.InsertClaims([]record.Claim{recClaim}); err != nil {
 			slog.Error("insert claim failed", "err", err)
 		}
-		if !best.Accurate {
-			sev := int(best.Severity)
-			if sev > topClaimSev {
-				topClaimSev = sev
-				topClaimType = recClaim.ClaimType
-				topClaimed = recClaim.Claimed
-				topActual = recClaim.Actual
-			}
-		}
+		inserted = append(inserted, recClaim)
 	}
 
 	verdict := record.Verdict(severity.Verdict(maxSev))
@@ -249,10 +240,15 @@ func (e *Engine) process(ev event.Event) {
 		ProjectPath: payload.ProjectPath,
 		SessionID:   payload.SessionID,
 	}
-	if topClaimSev >= 0 {
-		verifiedPayload.TopClaimType = topClaimType
-		verifiedPayload.TopClaimed = topClaimed
-		verifiedPayload.TopActual = topActual
+	if top := record.SelectTopFalseClaim(inserted); top != nil {
+		tc := event.TopFalseClaimFromRecord(*top)
+		verifiedPayload.TopClaim = &tc
+		// Flat aliases for ≤0.3.x readers (one-release compat).
+		verifiedPayload.TopClaimType = tc.ClaimType
+		verifiedPayload.TopClaimed = tc.Claimed
+		verifiedPayload.TopActual = tc.Actual
+		verifiedPayload.TopClaimSentence = tc.ClaimSentence
+		verifiedPayload.TopClaimContext = tc.ClaimContext
 	}
 	e.emitVerified(verifiedPayload)
 }
@@ -262,12 +258,9 @@ func (e *Engine) buildClaims(payload capture.RunPayload, vctx verifiers.VerifyCo
 	claims := ExtractProseClaims(payload.AssistantText)
 	claims = filterFileClaimsWithGitCommitOnly(claims, calls, vctx)
 	claims = append(claims, verifiers.ExtractConsistencyClaims(payload.AssistantText, calls, payload.ProjectPath)...)
+	enrichClaimWindows(payload.AssistantText, claims)
 	if !verifiers.HasMutating(calls) && (HasLocalActionProse(claims) || reGenericActionProse.MatchString(payload.AssistantText)) {
-		claims = append(claims, verifiers.Claim{
-			Type:        verifiers.ClaimNoAction,
-			Source:      "prose",
-			Description: "action claimed in prose with zero tool calls",
-		})
+		claims = append(claims, synthesizeNoActionClaim(claims, payload.AssistantText, reGenericActionProse))
 	}
 	for _, tc := range payload.ToolCalls {
 		if claim, ok := verifiers.ToolCallToClaim(tc); ok {
