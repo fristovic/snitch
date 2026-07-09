@@ -96,7 +96,7 @@ func TestWatcherLiveIngestion(t *testing.T) {
 			if err := w.Start(); err != nil {
 				t.Fatal(err)
 			}
-			defer w.Stop()
+			defer func() { _ = w.Stop() }()
 
 			// Create the session directory AFTER the watcher started (the
 			// real-world case: a new session appears mid-run).
@@ -182,7 +182,7 @@ func TestWatcherBurstCreateCatchUp(t *testing.T) {
 	if err := w.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer w.Stop()
+	defer func() { _ = w.Stop() }()
 	time.Sleep(100 * time.Millisecond)
 
 	const n = 5

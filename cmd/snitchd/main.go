@@ -154,9 +154,9 @@ func startRetention(ctx context.Context, store *record.Store, cfg config.Retenti
 
 // startTelemetrySync forwards labeled-and-shared verdicts to the training
 // pipeline. Opt-in only: no-ops entirely when telemetry.enabled is false.
-// Labels are metadata-only (claim type, harness, verdict, label) — no code,
-// file paths, or claim text ever leaves the machine. Offline POSTs are retried
-// on the next tick (labels stay label_synced=0 until delivered).
+// When shared, payloads include claim sentence + capped context + claimed/actual
+// for training (never prompts, code, or paths). Offline POSTs are retried on
+// the next tick (labels stay label_synced=0 until delivered).
 func startTelemetrySync(ctx context.Context, store *record.Store, cfg config.TelemetryConfig, deviceID, version string, enabledPlatforms []string) {
 	if !cfg.Enabled {
 		return
@@ -223,7 +223,8 @@ func startTelemetrySync(ctx context.Context, store *record.Store, cfg config.Tel
 }
 
 // postLabels sends a batch of labeled verdicts to the telemetry endpoint.
-// The payload is metadata-only; no claim text, code, or file paths.
+// Opt-in training fields (sentence, context, claimed, actual) may be present;
+// never prompts, code, or file paths.
 func postLabels(endpoint, deviceID, version string, labels []record.RunLabel) error {
 	type sharePayload struct {
 		DeviceID string            `json:"device_id"`

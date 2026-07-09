@@ -172,6 +172,7 @@ func (s *Store) GetRunLabel(runID string) (verdict string, shared bool, ts time.
 
 // UnsyncedLabels returns labeled-and-shared runs not yet forwarded by the
 // telemetry sync goroutine. Ordered oldest-first so we drain in arrival order.
+// Includes opt-in training text (sentence, context, claimed, actual).
 func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
 	if limit <= 0 {
 		limit = 100
@@ -181,7 +182,13 @@ func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
 		       (SELECT c.claim_type FROM claims c WHERE c.run_id = r.id
 		        ORDER BY c.severity DESC LIMIT 1) AS top_claim_type,
 		       (SELECT c.claimed FROM claims c WHERE c.run_id = r.id
-		        ORDER BY c.severity DESC LIMIT 1) AS top_claimed
+		        ORDER BY c.severity DESC LIMIT 1) AS top_claimed,
+		       (SELECT c.actual FROM claims c WHERE c.run_id = r.id
+		        ORDER BY c.severity DESC LIMIT 1) AS top_actual,
+		       (SELECT COALESCE(NULLIF(c.claim_sentence, ''), c.claimed) FROM claims c WHERE c.run_id = r.id
+		        ORDER BY c.severity DESC LIMIT 1) AS top_sentence,
+		       (SELECT COALESCE(c.claim_context, '') FROM claims c WHERE c.run_id = r.id
+		        ORDER BY c.severity DESC LIMIT 1) AS top_context
 		FROM runs r
 		WHERE r.label_shared = 1 AND r.label_synced = 0 AND r.label_verdict != ''
 		ORDER BY r.label_timestamp ASC
@@ -194,14 +201,22 @@ func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
 	for rows.Next() {
 		var l RunLabel
 		var ts string
-		var model, verdict, topType, topClaimed sql.NullString
-		if err := rows.Scan(&l.RunID, &l.Harness, &model, &l.LabelVerdict, &ts, &verdict, &topType, &topClaimed); err != nil {
+		var model, verdict, topType, topClaimed, topActual, topSentence, topContext sql.NullString
+		if err := rows.Scan(&l.RunID, &l.Harness, &model, &l.LabelVerdict, &ts, &verdict,
+			&topType, &topClaimed, &topActual, &topSentence, &topContext); err != nil {
 			continue
 		}
 		l.Model = model.String
 		l.Verdict = Verdict(verdict.String)
 		l.ClaimType = topType.String
-		l.ClaimedTextHash = hashText(topClaimed.String)
+		l.Claimed = topClaimed.String
+		l.Actual = topActual.String
+		l.ClaimSentence = topSentence.String
+		if l.ClaimSentence == "" {
+			l.ClaimSentence = l.Claimed
+		}
+		l.ClaimContext = topContext.String
+		l.ClaimedTextHash = hashText(l.ClaimSentence)
 		l.LabeledAt, _ = time.Parse(time.RFC3339, ts)
 		out = append(out, l)
 	}
@@ -209,7 +224,7 @@ func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
 }
 
 // hashText returns the sha256 hex of s, or "" for empty input. Used so claim
-// text can be deduplicated server-side without the text ever leaving the machine.
+// sentences can be deduplicated server-side.
 func hashText(s string) string {
 	if s == "" {
 		return ""
@@ -219,7 +234,7 @@ func hashText(s string) string {
 }
 
 // AddMissedClaim records a user-reported false negative: the agent claimed
-// something Snitch missed. Text is scrubbed and stored locally only.
+// something Snitch missed. Text is scrubbed before storage; shared rows may sync.
 func (s *Store) AddMissedClaim(runID, claimed, actual string, shared bool) error {
 	sharedInt := 0
 	if shared {
@@ -241,7 +256,7 @@ func (s *Store) UnsyncedMissedClaims(limit int) ([]RunLabel, error) {
 		limit = 100
 	}
 	rows, err := s.db.Query(`
-		SELECT m.id, COALESCE(m.run_id, ''), m.claimed, m.created_at,
+		SELECT m.id, COALESCE(m.run_id, ''), m.claimed, m.actual, m.created_at,
 		       COALESCE(r.harness, ''), COALESCE(r.model, '')
 		FROM missed_claims m
 		LEFT JOIN runs r ON r.id = m.run_id
@@ -254,12 +269,15 @@ func (s *Store) UnsyncedMissedClaims(limit int) ([]RunLabel, error) {
 	var out []RunLabel
 	for rows.Next() {
 		var l RunLabel
-		var claimed, ts string
-		if err := rows.Scan(&l.MissedID, &l.RunID, &claimed, &ts, &l.Harness, &l.Model); err != nil {
+		var claimed, actual, ts string
+		if err := rows.Scan(&l.MissedID, &l.RunID, &claimed, &actual, &ts, &l.Harness, &l.Model); err != nil {
 			continue
 		}
 		l.LabelVerdict = "added"
 		l.ClaimType = "missed"
+		l.Claimed = claimed
+		l.Actual = actual
+		l.ClaimSentence = claimed
 		l.ClaimedTextHash = hashText(claimed)
 		l.LabeledAt, _ = time.Parse(time.RFC3339, ts)
 		out = append(out, l)
@@ -320,10 +338,11 @@ func (s *Store) InsertClaims(claims []Claim) error {
 	for _, c := range claims {
 		ev, _ := json.Marshal(c.Evidence)
 		_, err := s.db.Exec(`
-			INSERT INTO claims (run_id, claim_type, source, target, claimed, actual, verified, severity, verifier, evidence, confidence)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO claims (run_id, claim_type, source, target, claimed, actual, claim_sentence, claim_context, verified, severity, verifier, evidence, confidence)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			c.RunID, c.ClaimType, c.Source, scrub.Scrub(c.Target), scrub.Scrub(c.Claimed),
-			scrub.Scrub(c.Actual), c.Verified, c.Severity, c.Verifier, string(ev), c.Confidence)
+			scrub.Scrub(c.Actual), scrub.Scrub(c.ClaimSentence), scrub.Scrub(c.ClaimContext),
+			c.Verified, c.Severity, c.Verifier, string(ev), c.Confidence)
 		if err != nil {
 			return err
 		}
@@ -466,7 +485,9 @@ func (s *Store) GetRunByID(id string) (*Run, error) {
 // GetClaimsByRun returns claims for a run.
 func (s *Store) GetClaimsByRun(runID string) ([]Claim, error) {
 	rows, err := s.db.Query(`
-		SELECT id, run_id, claim_type, source, target, claimed, actual, verified, severity, verifier, evidence, confidence, created_at
+		SELECT id, run_id, claim_type, source, target, claimed, actual,
+			COALESCE(claim_sentence, ''), COALESCE(claim_context, ''),
+			verified, severity, verifier, evidence, confidence, created_at
 		FROM claims WHERE run_id=? ORDER BY id`, runID)
 	if err != nil {
 		return nil, err
@@ -487,6 +508,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 	}
 	q := `
 		SELECT c.id, c.run_id, c.claim_type, c.source, c.target, c.claimed, c.actual,
+			COALESCE(c.claim_sentence, ''), COALESCE(c.claim_context, ''),
 			c.verified, c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
 			r.project_path, r.session_id, r.command, r.created_at, r.verdict
 		FROM claims c
@@ -535,7 +557,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]LieClaim, error) {
 		var lc LieClaim
 		var ev, created, runCreated, verdict string
 		if err := rows.Scan(&lc.ID, &lc.RunID, &lc.ClaimType, &lc.Source, &lc.Target, &lc.Claimed,
-			&lc.Actual, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
+			&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
 			&lc.ProjectPath, &lc.SessionID, &lc.RunCommand, &runCreated, &verdict); err != nil {
 			return nil, err
 		}
@@ -674,7 +696,7 @@ func scanClaims(rows *sql.Rows) ([]Claim, error) {
 		var ev string
 		var created string
 		if err := rows.Scan(&c.ID, &c.RunID, &c.ClaimType, &c.Source, &c.Target, &c.Claimed,
-			&c.Actual, &c.Verified, &c.Severity, &c.Verifier, &ev, &c.Confidence, &created); err != nil {
+			&c.Actual, &c.ClaimSentence, &c.ClaimContext, &c.Verified, &c.Severity, &c.Verifier, &ev, &c.Confidence, &created); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(ev), &c.Evidence)

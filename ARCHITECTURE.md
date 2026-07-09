@@ -4,7 +4,7 @@ Snitch is a **lie detector** for AI coding agents. It extracts claims from assis
 
 **Multi-harness:** Snitch ingests transcripts from five agents — Cursor, Claude Code, Codex, Pi (all JSONL via fsnotify) and OpenCode (SQLite via polling). Each harness provides a parser/reader, a path resolver, a shell-output resolver, and a tool-name normalization map, bundled in a `harness.Descriptor` registry. The verification pipeline is harness-agnostic: every harness normalizes its raw tool names to a canonical internal vocabulary at parse time.
 
-**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires Notification Center alerts on new lies (app-bundle icon), exposes **View Details…** / **History ▸ Open Dashboard…**, and collects **Mark Correct** / **Mark Incorrect** feedback labels. The CLI (`snitch`) is for history, debugging, and power users.
+**Menu-bar-first:** Snitch Bar (`cmd/snitchbar`) is the primary app. It owns `snitchd` lifecycle (start/stop), shows status in the menu bar, fires Notification Center alerts on new lies (app-bundle icon), and exposes **View Details…** / **History ▸ Open Dashboard…**. The CLI (`snitch`) is for history, debugging, and power users.
 
 ## Data flow
 
@@ -68,9 +68,9 @@ After capture, `verify.BuildVerifyContext` assembles evidence before verifiers r
 
 Turn snapshots persist `payload_json`, `start_head`, `end_head`, and `file_manifest_json` for the next turn's baseline.
 
-## Data flywheel
+## Data flywheel (coming soon)
 
-Every verified run can carry a user feedback label. The Snitch Bar menu exposes **Mark Correct** / **Mark Incorrect** on the latest lie; the CLI exposes `snitch label` and `snitch label missed` (false negatives, stored in `missed_claims`). Labels are stored on the `runs` table (`label_verdict`, `label_shared`, `label_synced`). When telemetry is opted in (`telemetry.enabled`), `snitchd` drains shared labels to the training endpoint on an interval; only metadata (claim type, harness, model, verdict, label, and a SHA-256 hash of the claim text for dedup) is sent — no code, paths, or claim text.
+Opt-in community labeling (correct / incorrect feedback, missed-lie reports) is planned. Labels store on the `runs` table in `~/.snitch/snitch.db`. When sharing is enabled (`telemetry.enabled` + share flag), sync may send the claim sentence, capped surrounding context, claimed→actual, and metadata (claim type, harness, model, verdict, label, sentence hash) — never user prompts, code, paths, or full transcripts. The Snitch Bar labeling UI stays behind `flywheelUIEnabled` until the training API ships.
 
 ## Prose lie detection
 

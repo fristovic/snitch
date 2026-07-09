@@ -60,13 +60,16 @@ Open Snitch Bar from Terminal with `snitch start`, or from the menu bar after in
 - **Start Snitching** / **Stop Snitching** — pause / resume lie detection
 - **Latest: …** — disabled preview of the most recent lie (claim type + short quote)
 - **View Details…** — open `snitch log --run <id>` for that lie
-- **Mark Correct** / **Mark Incorrect** — label that same lie (trains Snitch)
-- **History ▸** — Open Dashboard…, Report Missed Lie…, Share labels anonymously
+- **History ▸ Open Dashboard…** — browse runs and lies
 - **Quit Snitch Bar** stops the daemon
 
 If Snitch is paused or offline, choose **Start Snitching** to resume.
 
 Disable login auto-start: `SNITCH_MENUBAR=0 ./scripts/install.sh`
+
+### Labeling (coming soon)
+
+Community labeling (Mark Correct / Incorrect, report missed lies, opt-in sync) is **coming soon**. When enabled, shared examples may include the claim sentence, short surrounding context, and claimed→actual — never prompts, code, or paths. See the README “Help train Snitch” section.
 
 ## Notifications
 
@@ -186,15 +189,9 @@ Interactive TUI with live refresh (`--harness` to filter):
 
 Shows daemon health and enabled harnesses. Use `--detailed` for lie statistics, per-harness run counts, and recent failures.
 
-### `snitch label`
+### `snitch label` (coming soon)
 
-Mark a verdict correct or incorrect — every label trains Snitch:
-
-```bash
-snitch label <run-id> correct
-snitch label <run-id> incorrect --share
-snitch label missed --claimed "what the agent said" --actual "what happened"
-```
+Community labeling and opt-in training sync are **coming soon**. Shared payloads (when enabled) include claim sentence + capped context + claimed→actual; never prompts, code, or paths.
 
 ### `snitch replay`
 
@@ -249,8 +246,8 @@ retention:
   max_days: 30
   keep_failures: true
 telemetry:
-  enabled: false            # opt-in metadata sync
-  share_by_default: false   # labels marked shareable automatically
+  enabled: false            # reserved for upcoming labeling sync
+  share_by_default: false
 display:
   tui:
     max_runs_visible: 100

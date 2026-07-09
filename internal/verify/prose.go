@@ -223,7 +223,7 @@ func extractProseFromSegment(text, segment string) []verifiers.Claim {
 	var claims []verifiers.Claim
 	seen := make(map[string]bool)
 
-	add := func(t verifiers.ClaimType, quote, target string) {
+	addWithContext := func(t verifiers.ClaimType, quote, target, sentence, context string) {
 		target = verifiers.NormalizePathToken(target)
 		if isFileClaim(t) && !verifiers.LooksLikePath(target) {
 			return
@@ -237,6 +237,9 @@ func extractProseFromSegment(text, segment string) []verifiers.Claim {
 		if target != "" {
 			desc = string(t) + " " + target
 		}
+		if sentence == "" {
+			sentence = quote
+		}
 		claims = append(claims, verifiers.Claim{
 			Type:        t,
 			Source:      "prose",
@@ -245,6 +248,8 @@ func extractProseFromSegment(text, segment string) []verifiers.Claim {
 			Description: desc,
 			Segment:     segment,
 			Confidence:  scoreConfidence(t, target, quote, segment),
+			Sentence:    sentence,
+			Context:     context,
 		})
 	}
 
@@ -258,7 +263,9 @@ func extractProseFromSegment(text, segment string) []verifiers.Claim {
 			if p.TargetIdx > 0 && 2*p.TargetIdx+1 < len(m) && m[2*p.TargetIdx] >= 0 {
 				target = strings.Trim(text[m[2*p.TargetIdx]:m[2*p.TargetIdx+1]], `"'`+"`")
 			}
-			add(p.Type, text[start:end], target)
+			quote := text[start:end]
+			sentence, context := expandClaimWindow(text, start, end)
+			addWithContext(p.Type, quote, target, sentence, context)
 		}
 	}
 	return claims

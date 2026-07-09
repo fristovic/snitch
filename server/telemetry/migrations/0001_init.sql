@@ -1,5 +1,5 @@
--- Telemetry schema: devices + labels. Metadata only — no code, file paths,
--- or claim text ever lands here (claimed_text_hash is a dedup key).
+-- Telemetry schema: devices + labels.
+-- Opt-in training text (claim_sentence/context/claimed/actual) is added in 0002.
 
 create table if not exists devices (
     device_id       text primary key,          -- sha256(machine-id), client-side
@@ -19,7 +19,11 @@ create table if not exists labels (
     claim_type        text,
     verdict           text,                     -- Snitch's original verdict
     label_verdict     text not null,            -- correct | incorrect | added
-    claimed_text_hash text,                     -- sha256, dedup only
+    claimed_text_hash text,                     -- sha256 of claim_sentence (dedup)
+    claim_sentence    text,                     -- full sentence containing the match
+    claim_context     text,                     -- capped surrounding sentences
+    claimed           text,                     -- Snitch claimed / missed claimed
+    actual            text,                     -- Snitch actual / missed actual
     labeled_at        timestamptz,
     received_at       timestamptz not null default now()
 );

@@ -20,6 +20,11 @@ import (
 	"github.com/getlantern/systray"
 )
 
+// flywheelUIEnabled gates Mark Correct/Incorrect, Report Missed Lie, and Share
+// labels in the menu. Flip to true when shipping the labeling flywheel
+// (Mark items still also require telemetry.enabled).
+const flywheelUIEnabled = false
+
 type trayApp struct {
 	socket string
 	daemon *daemonMgr
@@ -42,9 +47,10 @@ type trayApp struct {
 	prefsItem      *systray.MenuItem
 	quitItem       *systray.MenuItem
 
-	shareLabels  bool // persisted as telemetry.share_by_default
-	consentShown bool // persisted as telemetry.consent_shown
-	notifyCfg    config.NotificationsConfig
+	shareLabels       bool // persisted as telemetry.share_by_default
+	consentShown      bool // persisted as telemetry.consent_shown
+	telemetryEnabled  bool // persisted as telemetry.enabled — gates label UI
+	notifyCfg         config.NotificationsConfig
 }
 
 func newTrayApp(socket string) *trayApp {
@@ -69,13 +75,17 @@ func (a *trayApp) onReady() {
 	a.previewItem = systray.AddMenuItem("No lies yet", "Most recent lie Snitch caught")
 	a.previewItem.Disable()
 	a.viewItem = systray.AddMenuItem("View Details…", "Open full verification log for the latest lie")
-	a.markCorrect = systray.AddMenuItem("Mark Correct", "Snitch was right about the latest lie — helps train Snitch")
-	a.markIncorrect = systray.AddMenuItem("Mark Incorrect", "Snitch was wrong about the latest lie — helps train Snitch")
+	a.markCorrect = systray.AddMenuItem("Mark Correct", "Snitch was right — this really was a lie (stored locally)")
+	a.markIncorrect = systray.AddMenuItem("Mark Incorrect", "Snitch was wrong — false positive (stored locally)")
 	systray.AddSeparator()
 	a.historyItem = systray.AddMenuItem("History", "Browse history and training options")
 	a.dashboardItem = a.historyItem.AddSubMenuItem("Open Dashboard…", "Browse runs and lies in the interactive TUI")
 	a.missedItem = a.historyItem.AddSubMenuItem("Report Missed Lie…", "Report a lie Snitch missed (opens terminal)")
-	a.shareItem = a.historyItem.AddSubMenuItemCheckbox("Share labels anonymously", "Share verdict metadata to train Snitch — no code or text leaves your machine", false)
+	a.shareItem = a.historyItem.AddSubMenuItemCheckbox("Share labels anonymously", "Share claim sentence + short context + claimed→actual to train Snitch — never prompts, code, or paths", false)
+	a.markCorrect.Hide()
+	a.markIncorrect.Hide()
+	a.missedItem.Hide()
+	a.shareItem.Hide()
 	systray.AddSeparator()
 	a.prefsItem = systray.AddMenuItem("Preferences…", "")
 	a.quitItem = systray.AddMenuItem("Quit Snitch Bar", "")
@@ -367,6 +377,7 @@ func (a *trayApp) loadShareState() {
 	a.mu.Lock()
 	a.shareLabels = cfg.Telemetry.ShareByDefault
 	a.consentShown = cfg.Telemetry.ConsentShown
+	a.telemetryEnabled = cfg.Telemetry.Enabled
 	a.notifyCfg = cfg.Notifications
 	a.mu.Unlock()
 	if a.shareLabels {
@@ -374,6 +385,7 @@ func (a *trayApp) loadShareState() {
 	} else {
 		a.shareItem.Uncheck()
 	}
+	a.signalRefresh()
 }
 
 // toggleShare flips the anonymous-sharing opt-in and persists it via config.
@@ -391,18 +403,22 @@ func (a *trayApp) toggleShare() {
 }
 
 // maybeShowConsent shows the one-time telemetry consent prompt on the first
-// detected lie. It never enables sharing — it only informs; the user opts in
-// via the checkbox or CLI.
+// detected lie when the flywheel UI and telemetry sync are enabled. It never
+// enables sharing — it only informs; the user opts in via the checkbox or CLI.
 func (a *trayApp) maybeShowConsent() {
+	if !flywheelUIEnabled {
+		return
+	}
 	a.mu.Lock()
 	shown := a.consentShown
+	telemetryOn := a.telemetryEnabled
 	a.consentShown = true
 	a.mu.Unlock()
-	if shown {
+	if shown || !telemetryOn {
 		return
 	}
 	a.setConfig("telemetry.consent_shown", "true")
-	a.flashTitle("Snitch can train a smarter lie detector from anonymous verdicts — enable 'Share labels anonymously' to help. No code ever leaves your machine.")
+	a.flashTitle("Share labels anonymously sends the claim sentence, short surrounding text, and claimed→actual — never prompts, code, or paths. Enable the checkbox to help train Snitch.")
 }
 
 // setConfig persists a config key through the daemon.
@@ -435,6 +451,7 @@ func setTrayIcon(icon, icon2x []byte) {
 func (a *trayApp) render() {
 	a.mu.Lock()
 	st := a.state
+	telemetryOn := a.telemetryEnabled
 	a.mu.Unlock()
 
 	switch {
@@ -460,10 +477,32 @@ func (a *trayApp) render() {
 	a.previewItem.Disable()
 	if st.Lie == nil {
 		a.viewItem.Disable()
+	} else {
+		a.viewItem.Enable()
+	}
+
+	if !flywheelUIEnabled {
+		a.markCorrect.Hide()
+		a.markIncorrect.Hide()
+		a.missedItem.Hide()
+		a.shareItem.Hide()
+		return
+	}
+	a.missedItem.Show()
+	a.shareItem.Show()
+	// Mark items also require telemetry.enabled so we don't offer labeling
+	// when sync cannot run.
+	if !telemetryOn {
+		a.markCorrect.Hide()
+		a.markIncorrect.Hide()
+		return
+	}
+	a.markCorrect.Show()
+	a.markIncorrect.Show()
+	if st.Lie == nil {
 		a.markCorrect.Disable()
 		a.markIncorrect.Disable()
 	} else {
-		a.viewItem.Enable()
 		a.markCorrect.Enable()
 		a.markIncorrect.Enable()
 	}

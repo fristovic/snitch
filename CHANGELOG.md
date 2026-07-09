@@ -1,16 +1,34 @@
 # Changelog
 
+## 0.3.2 — 2026-07-09
+
+Flywheel training-payload plumbing for a future opt-in classifier, with the labeling UI still gated off for public builds.
+
+### Added
+
+- Claim sentence + capped ±1–2 sentence context captured at prose extraction and stored on claims
+- Opt-in sync fields: `claim_sentence`, `claim_context`, `claimed`, `actual` (scrubbed); `claimed_text_hash` is the sentence hash
+- Telemetry server migration + edge function support for training text columns
+
+### Changed
+
+- Docs disclose the exact opt-in training payload and hard exclusions (no prompts, code, paths, or full transcripts)
+- Snitch Bar consent/share copy prepared for sentence + context sharing; menu stays behind `flywheelUIEnabled = false`
+
+### Removed
+
+- Public `docs/launch-checklist.md` (local-only via `.gitignore`)
+
 ## 0.3.1 — 2026-07-09
 
-Multi-harness lie detection, data flywheel, Snitch Bar–owned notifications with the Snitch app icon, and a round of UX/reliability fixes after end-to-end dogfooding.
+Multi-harness lie detection, Snitch Bar–owned notifications with the Snitch app icon, and UX/reliability fixes. Community labeling sync is reserved for a follow-up release.
 
 ### Added
 
 - **Multi-harness ingestion** — Claude Code, Codex, Pi (JSONL), and OpenCode (SQLite) alongside Cursor; registry-driven and opt-in per platform (`snitch config set platforms.<name>.enabled true`)
 - **Session lookback** — verification can credit evidence from up to three prior turns in the same session (git, shell, file tools, stubs); recap/summary prose is severity-calibrated
 - **Subagent merge** — Cursor `subagents/*.jsonl` tool calls overlapping the parent turn window are merged into verification context
-- **Data flywheel** — `snitch label <run-id> correct|incorrect`, `snitch label missed`, Snitch Bar **Mark Correct** / **Mark Incorrect**, **Report Missed Lie…**, and **Share labels anonymously**
-- **Opt-in telemetry** — metadata-only labeled-verdict sync (claim type, harness, model, verdict, label, claim-text hash); off by default
+- **Data flywheel (coming soon)** — community labeling and anonymous sync reserved for a follow-up release
 - `snitch replay <path>` — run transcripts through the verification pipeline offline against a throwaway database
 - `snitch log --harness <name>`, `snitch status --detailed` (per-harness run counts), per-harness `snitch doctor` checks
 - Idle-flush in the transcript watcher so a session’s final turn is captured without an explicit end marker
@@ -23,7 +41,7 @@ Multi-harness lie detection, data flywheel, Snitch Bar–owned notifications wit
 
 - **Notifications move to Snitch Bar** — macOS alerts are delivered from the app bundle (CGO + `NSUserNotification`) so the Snitch icon is used instead of Script Editor / `osascript`; `snitchd` no longer posts notifications
 - Verified-run events carry top-lie fields (`top_claim_type`, `top_claimed`, `top_actual`); Snitch Bar calls `notify.Deliver` with a cached notifications config (no extra `get_config` / `get_run` round-trips)
-- Snitch Bar menu redesign — disabled **Latest:** preview, **View Details…**, **Mark Correct** / **Mark Incorrect**, and a **History** submenu (Open Dashboard…, Report Missed Lie…, Share labels anonymously)
+- Snitch Bar menu redesign — disabled **Latest:** preview, **View Details…**, and **History ▸ Open Dashboard…**
 - Single `turnAssembler` encodes every harness’s turn-boundary semantics (watcher, OpenCode reader, and replay)
 - Turn snapshots are secret-scrubbed before persistence (previously only combined output was scrubbed)
 - Question / conditional / modal phrasing is suppressed for all claim types (fewer false positives)
