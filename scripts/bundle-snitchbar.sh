@@ -46,4 +46,22 @@ if [[ -d "${ROOT}/assets/menubar" ]]; then
   cp "${ROOT}/assets/menubar/"icon*.png "${APP_DIR}/Contents/Resources/" 2>/dev/null || true
 fi
 
+# App icon for Notification Center / Finder (from assets/snitch_head.png).
+HEAD_PNG="${ROOT}/assets/snitch_head.png"
+if [[ -f "$HEAD_PNG" ]]; then
+  if ! command -v sips >/dev/null || ! command -v iconutil >/dev/null; then
+    echo "error: $HEAD_PNG exists but sips/iconutil are required to build AppIcon.icns" >&2
+    exit 1
+  fi
+  ICONSET="$(mktemp -d)/AppIcon.iconset"
+  mkdir -p "$ICONSET"
+  for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" "$HEAD_PNG" --out "${ICONSET}/icon_${size}x${size}.png" >/dev/null
+    dbl=$((size * 2))
+    sips -z "$dbl" "$dbl" "$HEAD_PNG" --out "${ICONSET}/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET" -o "${APP_DIR}/Contents/Resources/AppIcon.icns"
+  rm -rf "$(dirname "$ICONSET")"
+fi
+
 echo "bundled ${APP_DIR}"

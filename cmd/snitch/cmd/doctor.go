@@ -47,8 +47,14 @@ var doctorCmd = &cobra.Command{
 		menubarPlist := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.snitch.menubar.plist")
 		printCheck("Snitch Bar LaunchAgent", fileExists(menubarPlist), menubarPlist)
 
-		shareApp := filepath.Join(os.Getenv("HOME"), ".local", "share", "snitch", "Snitch Bar.app")
-		printCheck("Snitch Bar.app", fileExists(filepath.Join(shareApp, "Contents", "MacOS", "snitchbar")), shareApp)
+		// Prefer the same resolution path as `snitch start` so Homebrew
+		// Cellar installs and SNITCH_BAR_APP overrides are not false failures.
+		if app, err := findSnitchBarApp(); err == nil {
+			printCheck("Snitch Bar.app", true, app)
+		} else {
+			shareApp := filepath.Join(os.Getenv("HOME"), ".local", "share", "snitch", "Snitch Bar.app")
+			printCheck("Snitch Bar.app", false, shareApp)
+		}
 
 		cursorApp := fileExists("/Applications/Cursor.app")
 		cursorData := fileExists(filepath.Join(os.Getenv("HOME"), ".cursor"))

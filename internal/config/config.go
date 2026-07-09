@@ -13,37 +13,37 @@ import (
 
 // Config is the root Snitch configuration.
 type Config struct {
-	Daemon        DaemonConfig        `yaml:"daemon"`
-	Platforms     PlatformsConfig     `yaml:"platforms"`
-	Verification  VerificationConfig  `yaml:"verification"`
-	Analytics     AnalyticsConfig     `yaml:"analytics"`
-	Retention     RetentionConfig     `yaml:"retention"`
-	Display       DisplayConfig       `yaml:"display"`
-	Notifications NotificationsConfig `yaml:"notifications"`
-	Telemetry     TelemetryConfig     `yaml:"telemetry"`
+	Daemon        DaemonConfig        `yaml:"daemon" json:"daemon"`
+	Platforms     PlatformsConfig     `yaml:"platforms" json:"platforms"`
+	Verification  VerificationConfig  `yaml:"verification" json:"verification"`
+	Analytics     AnalyticsConfig     `yaml:"analytics" json:"analytics"`
+	Retention     RetentionConfig     `yaml:"retention" json:"retention"`
+	Display       DisplayConfig       `yaml:"display" json:"display"`
+	Notifications NotificationsConfig `yaml:"notifications" json:"notifications"`
+	Telemetry     TelemetryConfig     `yaml:"telemetry" json:"telemetry"`
 }
 
 type DaemonConfig struct {
-	DataDir    string `yaml:"data_dir"`
-	SocketPath string `yaml:"socket_path"`
-	LogLevel   string `yaml:"log_level"`
+	DataDir    string `yaml:"data_dir" json:"data_dir"`
+	SocketPath string `yaml:"socket_path" json:"socket_path"`
+	LogLevel   string `yaml:"log_level" json:"log_level"`
 }
 
 // PlatformConfig configures one harness's ingestion. TranscriptWatchPath is
 // the watch root for JSONL harnesses (Cursor, Claude, Codex, Pi); for OpenCode
 // it is the path to opencode.db.
 type PlatformConfig struct {
-	Enabled             bool   `yaml:"enabled"`
-	TranscriptWatchPath string `yaml:"transcript_watch_path"`
+	Enabled             bool   `yaml:"enabled" json:"enabled"`
+	TranscriptWatchPath string `yaml:"transcript_watch_path" json:"transcript_watch_path"`
 }
 
 // PlatformsConfig holds per-harness ingestion settings.
 type PlatformsConfig struct {
-	Cursor   PlatformConfig `yaml:"cursor"`
-	Claude   PlatformConfig `yaml:"claude"`
-	Codex    PlatformConfig `yaml:"codex"`
-	Pi       PlatformConfig `yaml:"pi"`
-	OpenCode PlatformConfig `yaml:"opencode"`
+	Cursor   PlatformConfig `yaml:"cursor" json:"cursor"`
+	Claude   PlatformConfig `yaml:"claude" json:"claude"`
+	Codex    PlatformConfig `yaml:"codex" json:"codex"`
+	Pi       PlatformConfig `yaml:"pi" json:"pi"`
+	OpenCode PlatformConfig `yaml:"opencode" json:"opencode"`
 }
 
 // byHarness is the single source of truth mapping harness names to platform
@@ -87,39 +87,39 @@ type TelemetryConfig struct {
 }
 
 type VerificationConfig struct {
-	MaxConcurrentVerifications int                 `yaml:"max_concurrent_verifications"`
-	ShellVerifier              ShellVerifierConfig `yaml:"shell_verifier"`
+	MaxConcurrentVerifications int                 `yaml:"max_concurrent_verifications" json:"max_concurrent_verifications"`
+	ShellVerifier              ShellVerifierConfig `yaml:"shell_verifier" json:"shell_verifier"`
 }
 
 type ShellVerifierConfig struct {
-	AllowRerun map[string]bool `yaml:"allow_rerun"`
+	AllowRerun map[string]bool `yaml:"allow_rerun" json:"allow_rerun"`
 }
 
 type AnalyticsConfig struct {
-	Enabled        bool   `yaml:"enabled"`
-	Endpoint       string `yaml:"endpoint"`
-	IntervalH      int    `yaml:"interval_h"`
-	SigningKeyPath string `yaml:"signing_key_path"`
+	Enabled        bool   `yaml:"enabled" json:"enabled"`
+	Endpoint       string `yaml:"endpoint" json:"endpoint"`
+	IntervalH      int    `yaml:"interval_h" json:"interval_h"`
+	SigningKeyPath string `yaml:"signing_key_path" json:"signing_key_path"`
 }
 
 type RetentionConfig struct {
-	MaxDays      int  `yaml:"max_days"`
-	KeepFailures bool `yaml:"keep_failures"`
+	MaxDays      int  `yaml:"max_days" json:"max_days"`
+	KeepFailures bool `yaml:"keep_failures" json:"keep_failures"`
 }
 
 type DisplayConfig struct {
-	TUI TUIConfig `yaml:"tui"`
+	TUI TUIConfig `yaml:"tui" json:"tui"`
 }
 
 type TUIConfig struct {
-	MaxRunsVisible int `yaml:"max_runs_visible"`
-	RefreshMS      int `yaml:"refresh_ms"`
+	MaxRunsVisible int `yaml:"max_runs_visible" json:"max_runs_visible"`
+	RefreshMS      int `yaml:"refresh_ms" json:"refresh_ms"`
 }
 
 type NotificationsConfig struct {
-	Enabled    bool `yaml:"enabled"`
-	OnWarn     bool `yaml:"on_warn"`
-	RateLimitS int  `yaml:"rate_limit_s"`
+	Enabled    bool `yaml:"enabled" json:"enabled"`
+	OnWarn     bool `yaml:"on_warn" json:"on_warn"`
+	RateLimitS int  `yaml:"rate_limit_s" json:"rate_limit_s"`
 }
 
 // Load reads configuration from path. Missing file returns defaults.

@@ -138,29 +138,49 @@ func (w *Watcher) walkAndWatch(root string) error {
 			return nil
 		}
 		if ownsDir(path) || path == w.cfg.Root {
-			return w.watchDir(path)
+			// Startup walk: seed at EOF so historical transcripts are not
+			// re-ingested. Mid-run directory creates use catchUp=true instead.
+			return w.watchDir(path, false)
 		}
 		return nil
 	})
 }
 
-func (w *Watcher) watchDir(dir string) error {
+// watchDir registers dir with fsnotify. When catchUp is true (a directory
+// created after Start), existing owned files are ingested from offset 0 so a
+// burst create+write is not skipped by seeding at EOF.
+func (w *Watcher) watchDir(dir string, catchUp bool) error {
+	return w.watchDirWithSeed(dir, catchUp, !catchUp)
+}
+
+func (w *Watcher) watchDirWithSeed(dir string, catchUp, seedFiles bool) error {
 	w.mu.Lock()
-	if w.watched[dir] {
-		w.mu.Unlock()
-		return nil
+	already := w.watched[dir]
+	if !already {
+		w.watched[dir] = true
 	}
-	w.watched[dir] = true
 	w.mu.Unlock()
-	if err := w.watcher.Add(dir); err != nil {
-		return err
+	if !already {
+		if err := w.watcher.Add(dir); err != nil {
+			return err
+		}
 	}
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
 		if e.IsDir() {
-			_ = w.watchDir(filepath.Join(dir, e.Name()))
-		} else if w.owns(filepath.Join(dir, e.Name())) {
-			w.seedOffsetEOF(filepath.Join(dir, e.Name()))
+			if catchUp {
+				_ = w.watchDirWithSeed(path, false, false)
+			} else {
+				_ = w.watchDirWithSeed(path, false, seedFiles)
+			}
+		} else if w.owns(path) {
+			switch {
+			case catchUp:
+				w.ingest(path)
+			case seedFiles && !already:
+				w.seedOffsetEOF(path)
+			}
 		}
 	}
 	return nil
@@ -232,7 +252,7 @@ func (w *Watcher) handleEvent(ev fsnotify.Event) {
 	path := ev.Name
 	if ev.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
-			_ = w.watchDir(path)
+			_ = w.watchDir(path, true)
 			return
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/fristovic/snitch/internal/record"
+	"github.com/fristovic/snitch/internal/textutil"
 )
 
 // FormatNotification returns the macOS notification title and body for a lie.
@@ -22,7 +23,7 @@ func FormatNotification(claimType, claimed, actual, projectPath string) (title, 
 	if actual == "" {
 		body = claimed
 	} else {
-		body = fmt.Sprintf("%q → %s", truncate(claimed, 120), truncate(actual, 120))
+		body = fmt.Sprintf("%q → %s", textutil.TruncateRunes(claimed, 120), textutil.TruncateRunes(actual, 120))
 	}
 	return title, body
 }
@@ -40,11 +41,4 @@ func TopLieClaim(claims []record.Claim) *record.Claim {
 		}
 	}
 	return best
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-1] + "…"
 }

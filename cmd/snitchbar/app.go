@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/fristovic/snitch/assets/menubar"
+	"github.com/fristovic/snitch/internal/config"
 	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/ipc"
+	"github.com/fristovic/snitch/internal/notify"
 	"github.com/fristovic/snitch/internal/platform"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/getlantern/systray"
@@ -27,19 +29,22 @@ type trayApp struct {
 
 	refreshCh chan struct{}
 
-	status        *systray.MenuItem
-	toggleItem    *systray.MenuItem
-	showItem      *systray.MenuItem
-	thumbUpItem   *systray.MenuItem
-	thumbDownItem *systray.MenuItem
-	missedItem    *systray.MenuItem
-	shareItem     *systray.MenuItem
-	dashboardItem *systray.MenuItem
-	prefsItem     *systray.MenuItem
-	quitItem      *systray.MenuItem
+	status         *systray.MenuItem
+	toggleItem     *systray.MenuItem
+	previewItem    *systray.MenuItem // disabled context for latest lie
+	viewItem       *systray.MenuItem
+	markCorrect    *systray.MenuItem
+	markIncorrect  *systray.MenuItem
+	historyItem    *systray.MenuItem
+	dashboardItem  *systray.MenuItem
+	missedItem     *systray.MenuItem
+	shareItem      *systray.MenuItem
+	prefsItem      *systray.MenuItem
+	quitItem       *systray.MenuItem
 
 	shareLabels  bool // persisted as telemetry.share_by_default
 	consentShown bool // persisted as telemetry.consent_shown
+	notifyCfg    config.NotificationsConfig
 }
 
 func newTrayApp(socket string) *trayApp {
@@ -61,12 +66,16 @@ func (a *trayApp) onReady() {
 	systray.AddSeparator()
 	a.toggleItem = systray.AddMenuItem("Stop Snitching", "Start or stop lie detection")
 	systray.AddSeparator()
-	a.showItem = systray.AddMenuItem("Show Last Lie", "Open full verification log for the latest lie")
-	a.thumbUpItem = systray.AddMenuItem("👍 Was Snitch right", "Mark the last verdict correct — helps train Snitch")
-	a.thumbDownItem = systray.AddMenuItem("👎 Was Snitch wrong", "Mark the last verdict incorrect — helps train Snitch")
-	a.missedItem = systray.AddMenuItem("Report Missed Lie…", "Report a lie Snitch missed (opens terminal)")
-	a.shareItem = systray.AddMenuItemCheckbox("Share labels anonymously", "Share verdict metadata to train Snitch — no code or text leaves your machine", false)
-	a.dashboardItem = systray.AddMenuItem("Open Dashboard…", "Browse runs and lies in the interactive TUI")
+	a.previewItem = systray.AddMenuItem("No lies yet", "Most recent lie Snitch caught")
+	a.previewItem.Disable()
+	a.viewItem = systray.AddMenuItem("View Details…", "Open full verification log for the latest lie")
+	a.markCorrect = systray.AddMenuItem("Mark Correct", "Snitch was right about the latest lie — helps train Snitch")
+	a.markIncorrect = systray.AddMenuItem("Mark Incorrect", "Snitch was wrong about the latest lie — helps train Snitch")
+	systray.AddSeparator()
+	a.historyItem = systray.AddMenuItem("History", "Browse history and training options")
+	a.dashboardItem = a.historyItem.AddSubMenuItem("Open Dashboard…", "Browse runs and lies in the interactive TUI")
+	a.missedItem = a.historyItem.AddSubMenuItem("Report Missed Lie…", "Report a lie Snitch missed (opens terminal)")
+	a.shareItem = a.historyItem.AddSubMenuItemCheckbox("Share labels anonymously", "Share verdict metadata to train Snitch — no code or text leaves your machine", false)
 	systray.AddSeparator()
 	a.prefsItem = systray.AddMenuItem("Preferences…", "")
 	a.quitItem = systray.AddMenuItem("Quit Snitch Bar", "")
@@ -86,13 +95,13 @@ func (a *trayApp) onExit() {
 func (a *trayApp) handleClicks() {
 	for {
 		select {
-		case <-a.showItem.ClickedCh:
+		case <-a.viewItem.ClickedCh:
 			a.acknowledgeAlert()
 			a.loadLatestLie()
 			a.showLastLie()
-		case <-a.thumbUpItem.ClickedCh:
+		case <-a.markCorrect.ClickedCh:
 			a.submitLabel("correct")
-		case <-a.thumbDownItem.ClickedCh:
+		case <-a.markIncorrect.ClickedCh:
 			a.submitLabel("incorrect")
 		case <-a.missedItem.ClickedCh:
 			a.acknowledgeAlert()
@@ -198,6 +207,7 @@ func (a *trayApp) watchLoop() {
 			if err := json.Unmarshal(msg.Data, &p); err != nil {
 				return nil
 			}
+			a.maybeNotify(p)
 			if p.Verdict != record.VerdictFail {
 				return nil
 			}
@@ -293,11 +303,22 @@ func (a *trayApp) loadLatestLie() {
 		a.mu.Lock()
 		a.state.Lie = nil
 		a.mu.Unlock()
+		a.signalRefresh()
 		return
 	}
 	a.mu.Lock()
 	a.state.Lie = &claims[0]
 	a.mu.Unlock()
+	a.signalRefresh()
+}
+
+// maybeNotify posts a Notification Center alert from Snitch Bar so macOS
+// attributes it to the app bundle (Snitch icon) instead of Script Editor.
+func (a *trayApp) maybeNotify(p event.RunVerifiedPayload) {
+	a.mu.Lock()
+	cfg := a.notifyCfg
+	a.mu.Unlock()
+	notify.Deliver(p, cfg)
 }
 
 // submitLabel records a "Was this right?" verdict for the latest lie. The
@@ -339,18 +360,14 @@ func (a *trayApp) loadShareState() {
 	if err != nil {
 		return
 	}
-	var cfg struct {
-		Telemetry struct {
-			ShareByDefault bool `yaml:"share_by_default" json:"share_by_default"`
-			ConsentShown   bool `yaml:"consent_shown" json:"consent_shown"`
-		} `json:"telemetry"`
-	}
+	var cfg config.Config
 	if json.Unmarshal(data, &cfg) != nil {
 		return
 	}
 	a.mu.Lock()
 	a.shareLabels = cfg.Telemetry.ShareByDefault
 	a.consentShown = cfg.Telemetry.ConsentShown
+	a.notifyCfg = cfg.Notifications
 	a.mu.Unlock()
 	if a.shareLabels {
 		a.shareItem.Check()
@@ -438,10 +455,17 @@ func (a *trayApp) render() {
 	} else {
 		a.toggleItem.Enable()
 	}
+
+	a.previewItem.SetTitle(LatestLiePreview(st.Lie))
+	a.previewItem.Disable()
 	if st.Lie == nil {
-		a.showItem.Disable()
+		a.viewItem.Disable()
+		a.markCorrect.Disable()
+		a.markIncorrect.Disable()
 	} else {
-		a.showItem.Enable()
+		a.viewItem.Enable()
+		a.markCorrect.Enable()
+		a.markIncorrect.Enable()
 	}
 }
 

@@ -18,7 +18,6 @@ import (
 	"github.com/fristovic/snitch/internal/event"
 	"github.com/fristovic/snitch/internal/harness"
 	"github.com/fristovic/snitch/internal/ipc"
-	"github.com/fristovic/snitch/internal/notify"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/fristovic/snitch/internal/report"
 	"github.com/fristovic/snitch/internal/verify"
@@ -68,8 +67,8 @@ func main() {
 
 	verifyEngine := verify.NewEngine(bus, store, cfg.Verification, deviceID, registry.ShellResolver)
 	verifyEngine.OnVerified(func(p event.RunVerifiedPayload) {
+		// Notifications are delivered by Snitch Bar (so they use the app icon).
 		ipcServer.Broadcast("run.completed", p)
-		notify.MaybeNotify(store, p, cfg.Notifications)
 	})
 	verifyEngine.Start()
 

@@ -44,7 +44,25 @@ func TestRateLimiter(t *testing.T) {
 	}
 }
 
-func TestMaybeNotifyDisabled(t *testing.T) {
+func TestDeliverDisabled(t *testing.T) {
 	resetLimiter()
-	MaybeNotify(nil, event.RunVerifiedPayload{Verdict: record.VerdictFail}, config.NotificationsConfig{Enabled: false})
+	Deliver(event.RunVerifiedPayload{
+		Verdict:      record.VerdictFail,
+		TopClaimType: "test_pass",
+	}, config.NotificationsConfig{Enabled: false})
+}
+
+func TestDeliverNoTopClaim(t *testing.T) {
+	resetLimiter()
+	Deliver(event.RunVerifiedPayload{
+		Verdict: record.VerdictFail,
+	}, config.NotificationsConfig{Enabled: true})
+}
+
+func TestDeliverWarnGated(t *testing.T) {
+	resetLimiter()
+	Deliver(event.RunVerifiedPayload{
+		Verdict:      record.VerdictWarn,
+		TopClaimType: "test_pass",
+	}, config.NotificationsConfig{Enabled: true, OnWarn: false})
 }

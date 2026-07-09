@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -386,8 +387,11 @@ func (c *Client) Call(method string, params any) (json.RawMessage, error) {
 	if _, err := c.conn.Write(append(data, '\n')); err != nil {
 		return nil, err
 	}
-	scanner := bufio.NewScanner(c.conn)
+	scanner := newScanner(c.conn)
 	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("no response")
 	}
 	var resp Response
@@ -418,7 +422,7 @@ func Watch(ctx context.Context, addr string, handler func(EventMsg) error) error
 		return err
 	}
 
-	scanner := bufio.NewScanner(conn)
+	scanner := newScanner(conn)
 	if !scanner.Scan() {
 		return errors.New("no subscribe response")
 	}
@@ -448,4 +452,11 @@ func Watch(ctx context.Context, addr string, handler func(EventMsg) error) error
 		return ctx.Err()
 	}
 	return scanner.Err()
+}
+
+// newScanner returns a line scanner with an 8MiB max token size for large IPC payloads.
+func newScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	return scanner
 }

@@ -154,6 +154,8 @@ func (e *Engine) process(ev event.Event) {
 
 	maxSev := severity.Level0
 	verified, falseClaims := 0, 0
+	var topClaimType, topClaimed, topActual string
+	topClaimSev := -1
 
 	for _, claim := range claims {
 		best := verifiers.Result{Claim: claim, Severity: severity.Level(-1)}
@@ -205,6 +207,15 @@ func (e *Engine) process(ev event.Event) {
 		if err := e.store.InsertClaims([]record.Claim{recClaim}); err != nil {
 			slog.Error("insert claim failed", "err", err)
 		}
+		if !best.Accurate {
+			sev := int(best.Severity)
+			if sev > topClaimSev {
+				topClaimSev = sev
+				topClaimType = recClaim.ClaimType
+				topClaimed = recClaim.Claimed
+				topActual = recClaim.Actual
+			}
+		}
 	}
 
 	verdict := record.Verdict(severity.Verdict(maxSev))
@@ -225,14 +236,20 @@ func (e *Engine) process(ev event.Event) {
 		slog.Warn("save turn snapshot failed", "err", err)
 	}
 
-	e.emitVerified(event.RunVerifiedPayload{
+	verifiedPayload := event.RunVerifiedPayload{
 		RunID:       payload.RunID,
 		Verdict:     verdict,
 		MaxSeverity: int(maxSev),
 		Command:     payload.Command,
 		ProjectPath: payload.ProjectPath,
 		SessionID:   payload.SessionID,
-	})
+	}
+	if topClaimSev >= 0 {
+		verifiedPayload.TopClaimType = topClaimType
+		verifiedPayload.TopClaimed = topClaimed
+		verifiedPayload.TopActual = topActual
+	}
+	e.emitVerified(verifiedPayload)
 }
 
 func (e *Engine) buildClaims(payload capture.RunPayload, vctx verifiers.VerifyContext) []verifiers.Claim {

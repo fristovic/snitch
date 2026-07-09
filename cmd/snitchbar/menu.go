@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/fristovic/snitch/internal/record"
+	"github.com/fristovic/snitch/internal/textutil"
 )
 
 // MenuState drives the systray dropdown labels.
@@ -36,4 +40,18 @@ func ToggleLabel(s MenuState) string {
 		return "Start Snitching"
 	}
 	return "Stop Snitching"
+}
+
+// LatestLiePreview is a disabled context row for the latest caught lie.
+// Empty string means "No lies yet".
+func LatestLiePreview(lie *record.LieClaim) string {
+	if lie == nil {
+		return "No lies yet"
+	}
+	claimed := strings.Join(strings.Fields(lie.Claimed), " ")
+	claimed = textutil.TruncateRunes(claimed, 42)
+	if claimed == "" {
+		claimed = lie.ClaimType
+	}
+	return fmt.Sprintf("Latest: %s — %q", lie.ClaimType, claimed)
 }

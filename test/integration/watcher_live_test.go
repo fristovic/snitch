@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -154,6 +155,63 @@ func TestWatcherLiveIngestion(t *testing.T) {
 				t.Errorf("no %q tool call in turns: %+v", tc.wantTool, turns)
 			}
 		})
+	}
+}
+
+// TestWatcherBurstCreateCatchUp ensures a new session directory whose
+// transcript is fully written before fsnotify delivers the dir Create still
+// gets ingested (catch-up), instead of being seeded at EOF and skipped.
+func TestWatcherBurstCreateCatchUp(t *testing.T) {
+	root := t.TempDir()
+	bus := event.NewBus()
+	defer bus.Close()
+	turnCh := bus.Subscribe(event.EventTurnCompleted)
+
+	w := transcript.NewWatcherWith(bus, transcript.WatcherConfig{
+		Harness:  "cursor",
+		Root:     root,
+		Parser:   transcript.CursorParser{},
+		Resolver: transcript.CursorPathResolver{},
+		OwnsFile: func(p string) bool {
+			return strings.Contains(p, "agent-transcripts") && strings.HasSuffix(p, ".jsonl")
+		},
+		OwnsDir:   func(p string) bool { return strings.Contains(p, "agent-transcripts") },
+		Enabled:   true,
+		IdleFlush: time.Second,
+	})
+	if err := w.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer w.Stop()
+	time.Sleep(100 * time.Millisecond)
+
+	const n = 5
+	body := `{"role":"user","message":{"content":[{"type":"text","text":"burst"}]}}` + "\n" +
+		`{"role":"assistant","message":{"content":[{"type":"text","text":"All tests pass."}]}}` + "\n" +
+		`{"type":"turn_ended","status":"success"}` + "\n"
+	transcripts := filepath.Join(root, "proj", "agent-transcripts")
+	if err := os.MkdirAll(transcripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	for i := 1; i <= n; i++ {
+		sess := filepath.Join(transcripts, "burst-"+strconv.Itoa(i))
+		if err := os.Mkdir(sess, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(sess, "sess.jsonl")
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case ev := <-turnCh:
+			var turn transcript.TurnCompleted
+			if err := json.Unmarshal(ev.Payload, &turn); err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timeout waiting for burst-%d catch-up", i)
+		}
 	}
 }
 

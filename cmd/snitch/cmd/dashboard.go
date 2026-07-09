@@ -13,6 +13,7 @@ import (
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/platform"
 	"github.com/fristovic/snitch/internal/record"
+	"github.com/fristovic/snitch/internal/textutil"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,8 @@ const (
 
 // dashboardHarness filters the dashboard to one harness when set via --harness.
 var dashboardHarness string
+
+var dashboardSelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229")).Background(lipgloss.Color("236"))
 
 type filterState struct {
 	Verdict    string // "", "snitched", "all"
@@ -165,10 +168,6 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filter = cycleClaimTypeFilter(m.filter)
 			m.cursor = 0
 			return m, m.loadData()
-		case "p":
-			m.filter = cycleProjectFilter(m.filter, m.status)
-			m.cursor = 0
-			return m, m.loadData()
 		case "/":
 			m.filter.Search = promptSearch()
 			m.cursor = 0
@@ -203,92 +202,180 @@ func (m dashboardModel) View() string {
 	stats := fmt.Sprintf("runs=%d snitched=%d projects=%d sessions=%d",
 		m.status.TotalRuns, m.status.SnitchedRuns, m.status.ProjectsWatched, m.status.SessionsSeen)
 	filters := filterStyle.Render(fmt.Sprintf(
-		"verdict=%s type=%s project=%s search=%q | tab mode v verdict t type p project / search",
+		"verdict=%s type=%s project=%s search=%q | tab mode  v verdict  t type  / search",
 		displayVerdict(m.filter), orDash(m.filter.ClaimType), orDash(m.filter.Project), m.filter.Search,
 	))
 
-	listW := m.width/2 - 2
-	if listW < 20 {
-		listW = 20
+	width := m.width
+	if width <= 0 {
+		width = 80
 	}
-	detailW := m.width - listW - 4
-	if detailW < 20 {
-		detailW = 20
+	height := m.height
+	if height <= 0 {
+		height = 24
 	}
+
+	listW, detailW, listRows, _, stack := layoutMetrics(width, height)
 
 	var listBody, detailBody string
 	if m.mode == modeLies {
-		listBody, detailBody = m.viewLies(listW, detailW)
+		listBody, detailBody = m.viewLies(listW, detailW, listRows)
 	} else {
-		listBody, detailBody = m.viewRuns(listW, detailW)
+		listBody, detailBody = m.viewRuns(listW, detailW, listRows)
 	}
 
 	listPane := lipgloss.NewStyle().Width(listW).Render(listBody)
 	detailPane := lipgloss.NewStyle().Width(detailW).Render(detailBody)
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top, listPane, " │ ", detailPane)
-	help := filterStyle.Render("\n↑/↓ navigate  tab runs/lies  q quit")
-	return header + "\n" + stats + "\n" + filters + "\n\n" + body + help
+	var body string
+	if stack {
+		body = listPane + "\n" + filterStyle.Render(strings.Repeat("─", min(width, 40))) + "\n" + detailPane
+	} else {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, listPane, " │ ", detailPane)
+	}
+	help := filterStyle.Render("↑/↓ navigate  tab runs/lies  q quit")
+	return header + "\n" + stats + "\n" + filters + "\n" + body + "\n" + help
 }
 
-func (m dashboardModel) viewRuns(listW, detailW int) (string, string) {
-	var list strings.Builder
-	for i, r := range m.runs {
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
-		line := fmt.Sprintf("%s%s %s", prefix, r.ID[:8], r.Verdict)
-		if len(r.Command) > 0 {
-			line += " " + truncateLog(r.Command, min(40, listW-20))
-		}
-		list.WriteString(truncateLog(line, listW) + "\n")
+func layoutMetrics(width, height int) (listW, detailW, listRows, detailRows int, stack bool) {
+	bodyRows := height - 6
+	if bodyRows < 6 {
+		bodyRows = 6
 	}
+	stack = width < 100
+	if stack {
+		listW = width
+		detailW = width
+		listRows = bodyRows / 2
+		if listRows < 4 {
+			listRows = 4
+		}
+		detailRows = bodyRows - listRows - 1
+		if detailRows < 3 {
+			detailRows = 3
+		}
+		return listW, detailW, listRows, detailRows, stack
+	}
+	listW = width/2 - 2
+	if listW < 28 {
+		listW = 28
+	}
+	detailW = width - listW - 3
+	if detailW < 28 {
+		detailW = 28
+	}
+	return listW, detailW, bodyRows, bodyRows, stack
+}
+
+func (m dashboardModel) viewRuns(listW, detailW, listRows int) (string, string) {
+	var list strings.Builder
 	if len(m.runs) == 0 {
 		list.WriteString("  (no runs)\n")
+	} else {
+		start, end := visibleWindow(m.cursor, len(m.runs), listRows)
+		for i := start; i < end; i++ {
+			r := m.runs[i]
+			summary := runListSummary(r, listW-18)
+			line := fmt.Sprintf("  %s %-4s %s", shortID(r.ID), r.Verdict, summary)
+			if i == m.cursor {
+				line = dashboardSelStyle.Render(textutil.TruncateRunes("> "+shortID(r.ID)+" "+string(r.Verdict)+" "+summary, listW))
+			} else {
+				line = textutil.TruncateRunes(line, listW)
+			}
+			list.WriteString(line + "\n")
+		}
 	}
 
-	detail := "(select a run)\n"
+	detail := "(select a run)"
 	if m.cursor < len(m.runs) {
 		r := m.runs[m.cursor]
-		detail = fmt.Sprintf("Run %s\nVerdict: %s\nProject: %s\nSession: %s\nTool calls: %d\n\nPrompt:\n%s\n",
-			r.ID, r.Verdict, r.ProjectPath, r.SessionID, r.ToolCallCount, truncateLog(r.Command, detailW))
-		claims, _ := m.fetchClaims(r.ID)
-		if len(claims) > 0 {
-			detail += "\nClaims:\n"
-			for _, c := range claims {
-				if c.Severity < 2 && c.Verified > 0 {
-					continue
+		prompt := textutil.OneLine(formatPrompt(r.Command), detailW*3)
+		detail = fmt.Sprintf("Run %s\nVerdict: %s\nProject: %s\nSession: %s\nHarness: %s\nTool calls: %d  lies: %d\n\nPrompt:\n%s",
+			shortID(r.ID), r.Verdict, textutil.OneLine(r.ProjectPath, detailW), shortID(r.SessionID),
+			orDash(r.Harness), r.ToolCallCount, r.FalseClaims, prompt)
+		if m.client != nil {
+			claims, _ := m.fetchClaims(r.ID)
+			if len(claims) > 0 {
+				detail += "\n\nClaims:"
+				for _, c := range claims {
+					if c.Severity < 2 && c.Verified > 0 {
+						continue
+					}
+					detail += fmt.Sprintf("\n  [%s] %s → %s",
+						c.ClaimType, textutil.OneLine(c.Claimed, 40), textutil.OneLine(c.Actual, 40))
 				}
-				detail += fmt.Sprintf("  [%s] %q → %s\n", c.ClaimType, truncateLog(c.Claimed, 50), c.Actual)
 			}
 		}
 	}
 	return list.String(), detail
 }
 
-func (m dashboardModel) viewLies(listW, detailW int) (string, string) {
+func (m dashboardModel) viewLies(listW, detailW, listRows int) (string, string) {
 	var list strings.Builder
-	for i, c := range m.lies {
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
-		line := fmt.Sprintf("%s%s %s %q", prefix, c.ClaimType, c.RunCreated.Format("15:04"), truncateLog(c.Claimed, min(30, listW-25)))
-		list.WriteString(truncateLog(line, listW) + "\n")
-	}
 	if len(m.lies) == 0 {
 		list.WriteString("  (no lies)\n")
+	} else {
+		start, end := visibleWindow(m.cursor, len(m.lies), listRows)
+		for i := start; i < end; i++ {
+			c := m.lies[i]
+			summary := textutil.OneLine(c.Claimed, listW-24)
+			plain := fmt.Sprintf("  %-12s %s %s", c.ClaimType, c.RunCreated.Format("15:04"), summary)
+			if i == m.cursor {
+				list.WriteString(dashboardSelStyle.Render(textutil.TruncateRunes("> "+c.ClaimType+" "+c.RunCreated.Format("15:04")+" "+summary, listW)) + "\n")
+			} else {
+				list.WriteString(textutil.TruncateRunes(plain, listW) + "\n")
+			}
+		}
 	}
 
-	detail := "(select a lie)\n"
+	detail := "(select a lie)"
 	if m.cursor < len(m.lies) {
 		c := m.lies[m.cursor]
-		detail = fmt.Sprintf("Lie: %s\nProject: %s\nSession: %s\nRun: %s\n\nClaimed:\n%s\n\nEvidence:\n%s\nVerifier: %s (sev %d)\n",
-			c.ClaimType, c.ProjectPath, c.SessionID, c.RunID,
-			c.Claimed, c.Actual, c.Verifier, c.Severity)
+		detail = fmt.Sprintf("Lie: %s\nProject: %s\nSession: %s\nRun: %s\n\nClaimed:\n%s\n\nActual:\n%s\n\nVerifier: %s (sev %d)",
+			c.ClaimType, textutil.OneLine(c.ProjectPath, detailW), shortID(c.SessionID), shortID(c.RunID),
+			textutil.OneLine(c.Claimed, detailW*2), textutil.OneLine(c.Actual, detailW*2), c.Verifier, c.Severity)
 	}
-	return list.String(), truncateLog(detail, detailW*4)
+	return list.String(), detail
+}
+
+// visibleWindow returns a [start,end) window of size rows centered on cursor.
+func visibleWindow(cursor, total, rows int) (int, int) {
+	if rows < 1 {
+		rows = 1
+	}
+	if total <= rows {
+		return 0, total
+	}
+	start := cursor - rows/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + rows
+	if end > total {
+		end = total
+		start = end - rows
+		if start < 0 {
+			start = 0
+		}
+	}
+	return start, end
+}
+
+func shortID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
+}
+
+func runListSummary(r record.Run, max int) string {
+	if s := textutil.OneLine(formatPrompt(r.Command), max); s != "" {
+		return s
+	}
+	if r.ProjectPath != "" {
+		return textutil.OneLine(r.ProjectPath, max)
+	}
+	return ""
 }
 
 func (m *dashboardModel) fetchClaims(runID string) ([]record.Claim, error) {
@@ -337,23 +424,9 @@ func cycleClaimTypeFilter(f filterState) filterState {
 	return f
 }
 
-func cycleProjectFilter(f filterState, st record.DaemonStatus) filterState {
-	if f.Project != "" {
-		f.Project = ""
-		return f
-	}
-	if st.ProjectsWatched > 0 {
-		f.Project = "(set via / search)"
-	}
-	return f
-}
-
 func displayVerdict(f filterState) string {
 	if f.Verdict == "all" {
 		return "all"
-	}
-	if f.Verdict == "snitched" || !f.ShowPasses {
-		return "snitched"
 	}
 	return "snitched"
 }

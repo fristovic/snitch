@@ -8,6 +8,7 @@ import (
 	"github.com/fristovic/snitch/internal/ipc"
 	"github.com/fristovic/snitch/internal/record"
 	"github.com/fristovic/snitch/internal/severity"
+	"github.com/fristovic/snitch/internal/textutil"
 	"github.com/spf13/cobra"
 )
 
@@ -77,7 +78,7 @@ func printRunList(client *ipc.Client, harness string, limit int) error {
 		return nil
 	}
 	for _, r := range runs {
-		fmt.Printf("%s  %-6s  %s  %s\n", r.ID[:8], r.Verdict, r.CreatedAt.Format("2006-01-02 15:04"), truncateLog(formatPrompt(r.Command), 70))
+		fmt.Printf("%s  %-6s  %s  %s\n", r.ID[:8], r.Verdict, r.CreatedAt.Format("2006-01-02 15:04"), textutil.TruncateRunes(formatPrompt(r.Command), 70))
 	}
 	return nil
 }
@@ -103,7 +104,7 @@ func printRunDetail(client *ipc.Client, runID string) error {
 	}
 	fmt.Printf("Tool calls: %d\n", resp.Run.ToolCallCount)
 	if resp.Run.Command != "" {
-		fmt.Printf("Prompt: %s\n", truncateLog(formatPrompt(resp.Run.Command), 200))
+		fmt.Printf("Prompt: %s\n", textutil.OneLine(formatPrompt(resp.Run.Command), 200))
 	}
 	if resp.Run.Harness != "" {
 		fmt.Printf("Harness: %s\n", resp.Run.Harness)
@@ -140,7 +141,7 @@ func failureSummary(claims []record.Claim) string {
 		if actual == "" {
 			actual = "(not done)"
 		}
-		parts = append(parts, fmt.Sprintf("%q → %q", truncateLog(claimText(c), 80), truncateLog(actual, 80)))
+		parts = append(parts, fmt.Sprintf("%q → %q", textutil.TruncateRunes(claimText(c), 80), textutil.TruncateRunes(actual, 80)))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -153,13 +154,6 @@ func claimText(c record.Claim) string {
 		return c.ClaimType + " " + c.Target
 	}
 	return c.ClaimType
-}
-
-func truncateLog(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
 
 func formatPrompt(s string) string {

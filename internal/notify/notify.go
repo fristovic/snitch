@@ -11,8 +11,9 @@ import (
 
 var limiter = &rateLimiter{}
 
-// MaybeNotify sends a macOS notification for a verified run when configured.
-func MaybeNotify(store *record.Store, p event.RunVerifiedPayload, cfg config.NotificationsConfig) {
+// Deliver sends a macOS notification for a verified run when configured.
+// Top-lie fields on the payload must already be populated by the verifier.
+func Deliver(p event.RunVerifiedPayload, cfg config.NotificationsConfig) {
 	if !cfg.Enabled {
 		return
 	}
@@ -25,13 +26,7 @@ func MaybeNotify(store *record.Store, p event.RunVerifiedPayload, cfg config.Not
 	default:
 		return
 	}
-
-	claims, err := store.GetClaimsByRun(p.RunID)
-	if err != nil {
-		return
-	}
-	top := TopLieClaim(claims)
-	if top == nil {
+	if p.TopClaimType == "" {
 		return
 	}
 
@@ -43,7 +38,7 @@ func MaybeNotify(store *record.Store, p event.RunVerifiedPayload, cfg config.Not
 		return
 	}
 
-	title, body := FormatNotification(top.ClaimType, top.Claimed, top.Actual, p.ProjectPath)
+	title, body := FormatNotification(p.TopClaimType, p.TopClaimed, p.TopActual, p.ProjectPath)
 	_ = Notify(title, body)
 }
 

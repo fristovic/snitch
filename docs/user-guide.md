@@ -58,11 +58,10 @@ Open Snitch Bar from Terminal with `snitch start`, or from the menu bar after in
 
 - **Snitching...** status when the lie detector is active
 - **Start Snitching** / **Stop Snitching** — pause / resume lie detection
-- **Show Last Lie** — open full verification log for the latest lie (`snitch log --run <id>`)
-- **👍 / 👎** — mark the latest verdict correct or incorrect (trains Snitch)
-- **Report Missed Lie…** — report a lie Snitch didn't catch
-- **Share labels anonymously** — opt-in checkbox for metadata-only telemetry
-- **Open Dashboard…** — open interactive TUI in Terminal (`snitch dashboard`)
+- **Latest: …** — disabled preview of the most recent lie (claim type + short quote)
+- **View Details…** — open `snitch log --run <id>` for that lie
+- **Mark Correct** / **Mark Incorrect** — label that same lie (trains Snitch)
+- **History ▸** — Open Dashboard…, Report Missed Lie…, Share labels anonymously
 - **Quit Snitch Bar** stops the daemon
 
 If Snitch is paused or offline, choose **Start Snitching** to resume.
@@ -71,7 +70,7 @@ Disable login auto-start: `SNITCH_MENUBAR=0 ./scripts/install.sh`
 
 ## Notifications
 
-When a lie is caught, `snitchd` can send a macOS notification (title: claim type, body: claimed → actual). Enabled by default; configure under `notifications` in `~/.snitch/config.yaml`. macOS will prompt for notification permission on the first alert.
+When a lie is caught, Snitch Bar can send a macOS notification (title: claim type, body: claimed → actual). Enabled by default; configure under `notifications` in `~/.snitch/config.yaml`. macOS will prompt for notification permission on the first alert.
 
 ## How it works
 
@@ -98,6 +97,80 @@ snitch log --harness claude
 ```
 
 Use `snitch dashboard` to browse history and find run IDs.
+
+### Reading `snitch log` output
+
+Example:
+
+```text
+Run: 8179ec15-9b97-436f-afa1-d0f2e2794533
+Verdict: warn
+Session: c17d776a-…
+Project: /Users/…/snitch
+Tool calls: 11
+Harness: cursor
+Summary: "StrReplace …/menu_test.go" → "new_string not found in file"
+  [StrReplace] StrReplace …/menu_test.go → new_string not found in file (sev 2, file)
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| **Run** | One agent **turn** (user message → assistant reply → tools). UUID of the stored run. |
+| **Verdict** | Overall outcome for the turn, from the highest claim severity (see below). |
+| **Session** | Agent session id (many runs can share one session). |
+| **Project** | Working directory Snitch associated with the transcript. |
+| **Tool calls** | How many tools the agent invoked in that turn. |
+| **Harness** | Which agent platform produced the transcript (`cursor`, `claude`, …). |
+| **Prompt** | Truncated user prompt for the turn (when present). |
+| **Summary** | Short `claimed → actual` lines for the notable claims. |
+| **`[ClaimType]` line** | One claim Snitch checked. Format: `[type] claimed → actual (sev N, verifier)`. |
+
+#### Verdicts
+
+| Verdict | When you see it |
+| ------- | ---------------- |
+| **pass** | No material contradictions (max severity ≤ 1). |
+| **warn** | Partial / medium problems (max severity 2) — e.g. a tool edit that didn’t land, or a softer mismatch. Menu-bar alerts and notifications default to **fail** only. |
+| **fail** | High-confidence false claim (max severity 3) — typically prose like “all tests pass” contradicted by evidence. |
+
+#### Severity (`sev`)
+
+| sev | Label | Typical meaning |
+| --- | ----- | ---------------- |
+| **0** | verified | Claim matches evidence. |
+| **1** | minor inaccuracy | Soft mismatch; usually hidden in `snitch log` unless interesting. |
+| **2** | partial failure | Real problem, but not always a clear prose lie (often tool/file/shell). → run **warn** |
+| **3** | false claim | Strong contradiction. → run **fail** |
+
+#### Claim types (common)
+
+| Type | What Snitch thought the agent claimed |
+| ---- | -------------------------------------- |
+| **test_pass** | Tests passed / suite is green. |
+| **committed** / **pushed** | Git commit or push happened. |
+| **file_created** / **file_modified** / **file_deleted** | A file was created, edited, or removed. |
+| **no_action** | Prose claimed an action, but the turn had no mutating tools. |
+| **stub** | “Done / fully implemented” while written code still has TODO/panic stubs. |
+| **Shell**, **StrReplace**, **Write**, **Delete**, … | Tool-call claims — Snitch checked that the tool’s effect matches disk/output. |
+
+`(prose)` after the type means the claim came from assistant text, not only from a tool name.
+
+#### Verifier (the last field)
+
+| Verifier | What it checked |
+| -------- | ---------------- |
+| **contradiction** | Prose claim vs tools / git / filesystem / lookback. |
+| **file** | File tool results vs contents on disk. |
+| **shell** | Shell / test / build claims vs command evidence. |
+| **consistency** | Same-turn contradictions (e.g. conflicting statements). |
+| **subagent** | Parent turn vs merged subagent tool evidence (Cursor). |
+
+#### `claimed → actual`
+
+- **Left** — what the agent said or what the tool implied.
+- **Right** — what Snitch found instead.
+
+So `"StrReplace …" → "new_string not found in file"` means the edit tool was used, but the new text never appeared on disk.
 
 ### `snitch dashboard`
 
