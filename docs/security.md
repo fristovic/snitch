@@ -8,7 +8,12 @@ Snitch on macOS reads local AI agent transcript artifacts (Cursor, Claude Code, 
 
 - **Local only** by default — SQLite at `~/.snitch/snitch.db`
 - **Scrubbing** — API keys and common secret patterns removed before any command, output, or turn snapshot is stored
-- **Opt-in telemetry** — labeled-verdict metadata only (claim type, harness, model, verdict, label, SHA-256 hash of claim text); no code, paths, or claim text
+- **Opt-in labeling sync** (coming soon; off by default) — when both `telemetry.enabled` and a share flag are set, shared examples may include:
+  - claim sentence (full assistant sentence containing the match)
+  - capped surrounding context (±1–2 sentences)
+  - Snitch’s claimed → actual pair
+  - metadata: claim type, harness, model, verdict, user label, claim-sentence hash
+  - **Never:** user prompts, full transcripts, source code, file paths, project paths, or shell dumps
 - **Opt-in analytics** — aggregated stats only; no raw prompts or assistant text
 
 ## Permissions
@@ -28,6 +33,6 @@ The CLI talks to `snitchd` over a Unix domain socket (`~/.snitch/snitch.sock` by
 
 - No proxy or TLS interception
 - No cloud LLM calls for verification
-- No transmission of transcript content, ever — the opt-in telemetry and analytics channels carry metadata only
+- No transmission of user prompts, source code, or full transcripts — even when labeling sync is enabled
 
 See [SECURITY.md](../SECURITY.md) for vulnerability reporting.

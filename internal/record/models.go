@@ -49,8 +49,8 @@ type Run struct {
 }
 
 // RunLabel is a labeled run (or missed-claim report) ready for telemetry
-// sync. Contains only the metadata that may leave the machine — no code, file
-// paths, or claim text.
+// sync. When the user opts into sharing, training fields (sentence, context,
+// claimed, actual) may leave the machine — never prompts, code, or paths.
 type RunLabel struct {
 	RunID           string    `json:"run_id,omitempty"`
 	MissedID        int64     `json:"-"` // local id for missed-claim rows
@@ -59,25 +59,31 @@ type RunLabel struct {
 	ClaimType       string    `json:"claim_type,omitempty"`        // top claim type, if any
 	Verdict         Verdict   `json:"verdict,omitempty"`           // Snitch's original verdict
 	LabelVerdict    string    `json:"label_verdict"`               // "correct" | "incorrect" | "added"
-	ClaimedTextHash string    `json:"claimed_text_hash,omitempty"` // sha256 of claim text (dedup, never content)
+	ClaimedTextHash string    `json:"claimed_text_hash,omitempty"` // sha256 of claim sentence (dedup)
+	ClaimSentence   string    `json:"claim_sentence,omitempty"`    // full sentence containing the match
+	ClaimContext    string    `json:"claim_context,omitempty"`     // capped surrounding sentences
+	Claimed         string    `json:"claimed,omitempty"`           // Snitch claimed text / missed claimed
+	Actual          string    `json:"actual,omitempty"`            // Snitch actual / missed actual
 	LabeledAt       time.Time `json:"labeled_at"`
 }
 
 // Claim is a verified prose or tool claim.
 type Claim struct {
-	ID         int64     `json:"id"`
-	RunID      string    `json:"run_id"`
-	ClaimType  string    `json:"claim_type"`
-	Source     string    `json:"source"`
-	Target     string    `json:"target"`
-	Claimed    string    `json:"claimed"`
-	Actual     string    `json:"actual,omitempty"`
-	Verified   int       `json:"verified"`
-	Severity   int       `json:"severity"`
-	Verifier   string    `json:"verifier,omitempty"`
-	Evidence   []string  `json:"evidence,omitempty"`
-	Confidence int       `json:"confidence,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID            int64     `json:"id"`
+	RunID         string    `json:"run_id"`
+	ClaimType     string    `json:"claim_type"`
+	Source        string    `json:"source"`
+	Target        string    `json:"target"`
+	Claimed       string    `json:"claimed"`
+	Actual        string    `json:"actual,omitempty"`
+	ClaimSentence string    `json:"claim_sentence,omitempty"` // full sentence containing match
+	ClaimContext  string    `json:"claim_context,omitempty"`  // capped surrounding sentences
+	Verified      int       `json:"verified"`
+	Severity      int       `json:"severity"`
+	Verifier      string    `json:"verifier,omitempty"`
+	Evidence      []string  `json:"evidence,omitempty"`
+	Confidence    int       `json:"confidence,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // LieClaim is a claim joined with run context for querying.

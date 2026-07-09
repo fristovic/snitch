@@ -37,6 +37,10 @@ type Claim struct {
 	Segment     string         `json:"segment,omitempty"` // execution | recap
 	Confidence  int            `json:"confidence,omitempty"`
 	Input       map[string]any `json:"input,omitempty"`
+	// Sentence is the full assistant sentence containing Quote (prose only).
+	Sentence string `json:"sentence,omitempty"`
+	// Context is a capped ±1–2 sentence window around Sentence (prose only).
+	Context string `json:"context,omitempty"`
 }
 
 // TurnEvidence is a prior turn's checkable evidence.

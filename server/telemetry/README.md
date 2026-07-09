@@ -1,10 +1,10 @@
 # Snitch Telemetry Server
 
-Minimal Supabase project backing the opt-in data flywheel. Two endpoints, two
-tables. Nothing else until data volume justifies it.
+Optional Supabase project for the upcoming opt-in labeling flywheel. Two
+endpoints, two tables.
 
-Served at `https://telemetry.snitchworks.com` (a custom domain in front of the
-Supabase Edge Functions gateway).
+Intended hostname: `https://telemetry.snitchworks.com` (custom domain in front
+of Supabase Edge Functions).
 
 ## Endpoints
 
@@ -13,10 +13,17 @@ Supabase Edge Functions gateway).
 | POST | `/api/v1/telemetry/labels` | `{ device_id, snitch_version, labels: [...] }` |
 | POST | `/api/v1/telemetry/register` | `{ device_id, snitch_version, platforms: [...] }` |
 
-Both are anonymous (no auth) and rate-limited by the gateway. Label entries
-carry metadata only: `harness`, `model`, `claim_type`, `verdict`,
-`label_verdict`, `claimed_text_hash`, `labeled_at`. Never code, file paths, or
-claim text — the hash exists purely for server-side dedup.
+Both are anonymous (no auth) and rate-limited by the gateway. Sharing is
+**fully opt-in** on the client (`telemetry.enabled` + share flag).
+
+### What a shared label may include
+
+- Metadata: `harness`, `model`, `claim_type`, Snitch `verdict`, user `label_verdict`, `claimed_text_hash`, timestamps
+- Training text (for the future false-positive classifier): `claim_sentence` (full sentence containing the match), `claim_context` (capped ±1–2 surrounding sentences), `claimed` / `actual` (Snitch’s claimed→actual pair)
+
+### What is never collected
+
+User prompts, assistant transcripts beyond the capped claim window, source code, file paths, project paths, or shell output dumps.
 
 ## Deploy
 
@@ -32,7 +39,7 @@ supabase functions deploy telemetry-register
 
 ## Accuracy aggregates
 
-`label_accuracy` (see migrations) is the view that will power the public
+`label_accuracy` (see migrations) is the view that will power a public
 accuracy page once enough labels exist:
 
 ```sql

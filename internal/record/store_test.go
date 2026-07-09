@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,6 +193,42 @@ func TestEnsureDeviceID(t *testing.T) {
 		t.Fatalf("device id changed: %s vs %s", id1, id2)
 	}
 	_ = os.RemoveAll(dir)
+}
+
+func TestInsertClaimsScrubsTrainingText(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	_ = store.InsertRun(Run{ID: "r1", Verdict: VerdictFail, DeviceID: "d"})
+	secret := "sk-abcdefghijklmnopqrstuvwxyz012345"
+	leak := "OPENAI_API_KEY=" + secret
+	err = store.InsertClaims([]Claim{{
+		RunID: "r1", ClaimType: "test_pass", Source: "prose",
+		Claimed: "all tests pass " + leak,
+		Actual:  "failed " + leak,
+		ClaimSentence: "Sentence with " + leak + " inside.",
+		ClaimContext:  "Context " + leak + " around.",
+		Verified: -1, Severity: 3,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := store.GetClaimsByRun("r1")
+	if err != nil || len(claims) != 1 {
+		t.Fatalf("claims: %+v err=%v", claims, err)
+	}
+	c := claims[0]
+	for _, field := range []string{c.Claimed, c.Actual, c.ClaimSentence, c.ClaimContext} {
+		if strings.Contains(field, secret) {
+			t.Fatalf("secret leaked in %q", field)
+		}
+		if !strings.Contains(field, "[REDACTED]") {
+			t.Fatalf("expected scrub in %q", field)
+		}
+	}
 }
 
 func TestInsertClaims(t *testing.T) {

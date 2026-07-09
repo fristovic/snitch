@@ -192,17 +192,22 @@ func (e *Engine) process(ev event.Event) {
 			claimed = claim.Description
 		}
 		recClaim := record.Claim{
-			RunID:      payload.RunID,
-			ClaimType:  string(claim.Type),
-			Source:     claim.Source,
-			Target:     claim.Target,
-			Claimed:    claimed,
-			Actual:     best.GroundTruth,
-			Verified:   boolToVerified(best.Accurate),
-			Severity:   int(best.Severity),
-			Verifier:   best.Verifier,
-			Evidence:   best.Evidence,
-			Confidence: claim.Confidence,
+			RunID:         payload.RunID,
+			ClaimType:     string(claim.Type),
+			Source:        claim.Source,
+			Target:        claim.Target,
+			Claimed:       claimed,
+			Actual:        best.GroundTruth,
+			ClaimSentence: claim.Sentence,
+			ClaimContext:  claim.Context,
+			Verified:      boolToVerified(best.Accurate),
+			Severity:      int(best.Severity),
+			Verifier:      best.Verifier,
+			Evidence:      best.Evidence,
+			Confidence:    claim.Confidence,
+		}
+		if recClaim.ClaimSentence == "" {
+			recClaim.ClaimSentence = claimed
 		}
 		if err := e.store.InsertClaims([]record.Claim{recClaim}); err != nil {
 			slog.Error("insert claim failed", "err", err)
