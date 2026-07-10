@@ -83,6 +83,10 @@ From the Snitch menu:
 | **Quit Snitch Bar**                       | Stop the daemon and exit                                      |
 
 
+<p align="center">
+  <img src="docs/snitch_bar.png" alt="Snitch Bar menu" width="360">
+</p>
+
 When a false claim is caught, the menu bar icon alerts and Snitch Bar may show a Notification Center alert (Snitch app icon). Click **View Details…** for the full verification breakdown, or **History ▸ Open Dashboard…** to browse history.
 
 ### Terminal (optional)
@@ -157,6 +161,10 @@ Snitch runs passively after install — it reads each enabled agent's local tran
 ### Notifications
 
 When Snitch Bar receives a failed (or optionally warned) run, it posts a macOS Notification Center alert attributed to **Snitch Bar.app** (Snitch head icon). Configure in `~/.snitch/config.yaml`:
+
+<p align="center">
+  <img src="docs/snitch_notifications.png" alt="Snitch notification alert" width="480">
+</p>
 
 ```yaml
 notifications:
