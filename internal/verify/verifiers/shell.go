@@ -38,8 +38,11 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		return r, nil
 	}
 
-	if isGitCommand(cmd) {
-		return v.verifyGitShell(cmd, ctx)
+	if isGitCommitCommand(cmd) {
+		return v.verifyGitCommitShell(cmd, ctx)
+	}
+	if isGitPushCommand(cmd) {
+		return v.verifyGitPushShell(cmd, ctx)
 	}
 
 	for _, tc := range AllToolCalls(ctx) {
@@ -114,23 +117,26 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	return r, nil
 }
 
-func isGitCommand(cmd string) bool {
-	trimmed := strings.TrimSpace(cmd)
-	return strings.HasPrefix(trimmed, "git ") || trimmed == "git"
+func isGitCommitCommand(cmd string) bool {
+	return strings.Contains(strings.ToLower(cmd), "git commit")
 }
 
-func (v *ShellVerifier) verifyGitShell(cmd string, ctx VerifyContext) (Result, error) {
-	gitClaim := Claim{
+func isGitPushCommand(cmd string) bool {
+	return strings.Contains(strings.ToLower(cmd), "git push")
+}
+
+func (v *ShellVerifier) verifyGitCommitShell(cmd string, ctx VerifyContext) (Result, error) {
+	cv := &ContradictionVerifier{}
+	return cv.Verify(Claim{
 		Type:        ClaimCommitted,
 		Source:      "tool",
 		Description: cmd,
-	}
-	if strings.Contains(cmd, "push") {
-		cv := &ContradictionVerifier{}
-		return cv.Verify(Claim{Type: ClaimPushed, Source: "prose", Description: cmd}, ctx)
-	}
+	}, ctx)
+}
+
+func (v *ShellVerifier) verifyGitPushShell(cmd string, ctx VerifyContext) (Result, error) {
 	cv := &ContradictionVerifier{}
-	return cv.Verify(gitClaim, ctx)
+	return cv.Verify(Claim{Type: ClaimPushed, Source: "prose", Description: cmd}, ctx)
 }
 
 func parseTestOutput(output string) (passed bool, found bool) {
