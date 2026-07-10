@@ -4,7 +4,7 @@
 
 <p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>
 
-<p align="center"><a href="https://snitchworks.com">snitchworks.com</a> · <a href="#install">Install</a> · <a href="#help-train-snitch-coming-soon">Help train Snitch</a> · <a href="#roadmap">Roadmap</a></p>
+<p align="center"><a href="#install">Install</a> · <a href="#help-train-snitch-coming-soon">Help train Snitch</a> · <a href="#roadmap">Roadmap</a></p>
 
 <p align="center">
   <span style="display: inline-block; max-width: 720px; text-align: justify;">
