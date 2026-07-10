@@ -2,11 +2,20 @@
 
 ## Unreleased
 
+## 0.4.2 — 2026-07-10
+
+Patch release: fixes false `tool_shell` flags on read-only git commands, plus license and docs updates.
+
+### Fixed
+
+- `tool_shell` no longer treats every `git` command as a commit claim — `git diff`, `git status`, `git log`, etc. verify as normal shell commands instead of failing with “claimed commit but no commit evidence”
+
 ### Changed
 
 - License switched from MIT to **Apache License 2.0** (patent grant + NOTICE)
+- README marks **Help train Snitch** as coming soon; adds Snitch Bar and notification screenshots
+- Dependency updates: cobra, bubbletea, fsnotify; GitHub Actions (checkout, setup-go, goreleaser-action)
 
-## 0.4.1 — 2026-07-10
 
 Hotfix for Snitch Bar notification authorization after Homebrew upgrades.
 
