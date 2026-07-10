@@ -64,4 +64,13 @@ if [[ -f "$HEAD_PNG" ]]; then
   rm -rf "$(dirname "$ICONSET")"
 fi
 
+# Bind Info.plist + bundle id so UNUserNotificationCenter can authorize.
+# Linker-only adhoc signatures leave Identifier=a.out and break alerts after
+# Homebrew upgrades (UNErrorDomain Code=1 / NotificationsNotAllowed).
+if command -v codesign >/dev/null; then
+  codesign --force --deep --sign - \
+    --identifier "dev.snitch.menubar" \
+    "${APP_DIR}" >/dev/null
+fi
+
 echo "bundled ${APP_DIR}"
