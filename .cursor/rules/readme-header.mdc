@@ -1,23 +1,32 @@
 ---
 description: Preserve branded README header (logo, centered subtitle, nav)
 globs: README.md
-alwaysApply: false
+alwaysApply: true
 ---
 
-# README header — do not simplify
+# README header — hands off
 
-When editing `README.md`, **never** replace the top branded block with plain markdown.
+**Do not edit lines 1–13 of `README.md`** unless the user explicitly asks to change the logo, tagline, nav, or intro layout.
 
-Keep this structure intact (update copy inside only when intentional):
+Required structure (HTML, not markdown):
 
-- Centered logo: `<img src="docs/snitch_logo.png" ...>`
-- Centered tagline: `<p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>`
-- Centered nav with `snitchworks.com` + Install / Help train Snitch / Roadmap links
-- Centered justified intro paragraph in `<p align="center"><span style="...">...</span></p>` with HTML anchor tags for harness links
+```html
+<p align="center">
+  <img src="docs/snitch_logo.png" alt="Snitch logo" width="320">
+</p>
 
-Do **not**:
-- Remove the logo image
-- Flatten the header to `**bold**` + markdown links
-- Reformat tables or other README sections unless explicitly requested
+<p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>
 
-If a task only touches flywheel/docs elsewhere, leave the README header unchanged.
+<p align="center"><a href="https://snitchworks.com">snitchworks.com</a> · …</p>
+
+<p align="center"><span style="display: inline-block; max-width: 720px; text-align: justify;">…</span></p>
+```
+
+When editing `README.md` for other reasons (license, roadmap, tables, flywheel):
+
+- Change **only** the sections you were asked to change
+- Never replace the header with `**bold**` + markdown links
+- Never remove `docs/snitch_logo.png`
+- Never drop `snitchworks.com` from the nav
+
+If unsure, leave the header unchanged.
