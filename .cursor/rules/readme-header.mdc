@@ -1,0 +1,23 @@
+---
+description: Preserve branded README header (logo, centered subtitle, nav)
+globs: README.md
+alwaysApply: false
+---
+
+# README header — do not simplify
+
+When editing `README.md`, **never** replace the top branded block with plain markdown.
+
+Keep this structure intact (update copy inside only when intentional):
+
+- Centered logo: `<img src="docs/snitch_logo.png" ...>`
+- Centered tagline: `<p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>`
+- Centered nav with `snitchworks.com` + Install / Help train Snitch / Roadmap links
+- Centered justified intro paragraph in `<p align="center"><span style="...">...</span></p>` with HTML anchor tags for harness links
+
+Do **not**:
+- Remove the logo image
+- Flatten the header to `**bold**` + markdown links
+- Reformat tables or other README sections unless explicitly requested
+
+If a task only touches flywheel/docs elsewhere, leave the README header unchanged.

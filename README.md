@@ -1,8 +1,16 @@
-**Snitch watches your AI agent so you don't have to.**
+<p align="center">
+  <img src="docs/snitch_logo.png" alt="Snitch logo" width="320">
+</p>
 
-[Install](#install) · [Help train Snitch](#help-train-snitch-coming-soon) · [Roadmap](#roadmap)
+<p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>
 
-Snitch is a deterministic prose claim verifier for AI coding agents. It watches transcripts from [Cursor](https://cursor.com), [Claude Code](https://claude.com/claude-code), [Codex](https://github.com/openai/codex), [Pi](https://pi.dev), and [OpenCode](https://opencode.ai), extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
+<p align="center"><a href="https://snitchworks.com">snitchworks.com</a> · <a href="#install">Install</a> · <a href="#help-train-snitch-coming-soon">Help train Snitch</a> · <a href="#roadmap">Roadmap</a></p>
+
+<p align="center">
+  <span style="display: inline-block; max-width: 720px; text-align: justify;">
+    Snitch is a deterministic prose claim verifier for AI coding agents. It watches transcripts from <a href="https://cursor.com">Cursor</a>, <a href="https://claude.com/claude-code">Claude Code</a>, <a href="https://github.com/openai/codex">Codex</a>, <a href="https://pi.dev">Pi</a>, and <a href="https://opencode.ai">OpenCode</a>, extracts high-confidence claims from assistant text ("all tests pass", "I committed this"), and flags claims contradicted by evidence: tool calls (including subagent merges), tool output, filesystem, git, session lookback (3 prior turns), and same-turn consistency.
+  </span>
+</p>
 
 ## Install
 
