@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 — 2026-07-10
+
+Hotfix for Snitch Bar notification authorization after Homebrew upgrades.
+
+### Fixed
+
+- Bundle script adhoc-codesigns `Snitch Bar.app` as `dev.snitch.menubar` with Info.plist bound — fixes `UNErrorDomain Code=1` (NotificationsNotAllowed) when linker-only signatures left `Identifier=a.out`
+
 ## 0.4.0 — 2026-07-09
 
 Claim-first UX, clearer findings, and modern macOS notifications. Homebrew/curl upgrades replace CLI + daemon + Snitch Bar together.
