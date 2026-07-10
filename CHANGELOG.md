@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- License switched from MIT to **Apache License 2.0** (patent grant + NOTICE)
+
 ## 0.4.1 — 2026-07-10
 
 Hotfix for Snitch Bar notification authorization after Homebrew upgrades.

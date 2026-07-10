@@ -42,6 +42,7 @@ archives:
     formats: [tar.gz]
     files:
       - LICENSE
+      - NOTICE
       - README.md
       - scripts/bundle-snitchbar.sh
       - scripts/install.sh
@@ -72,7 +73,7 @@ brews:
     directory: Formula
     homepage: "https://github.com/fristovic/snitch"
     description: "Deterministic prose claim verifier for AI coding agents (Cursor, Claude Code, Codex, Pi, OpenCode)"
-    license: "MIT"
+    license: "Apache-2.0"
     install: |
       bin.install "snitch"
       bin.install "snitchd"

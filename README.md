@@ -270,6 +270,6 @@ When sharing is enabled (dual opt-in: `telemetry.enabled` + share flag), a share
 
 ## License
 
-MIT
+[Apache License 2.0](LICENSE)
 
 By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
