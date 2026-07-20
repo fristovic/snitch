@@ -21,8 +21,8 @@ func TestShellVerifierSyntaxOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
-		t.Fatalf("expected syntax-only pass: %+v", res)
+	if res.Epistemic != verifiers.EpistemicMissing {
+		t.Fatalf("expected syntax-only missing (re-run disabled): %+v", res)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestShellVerifierGitDiffDoesNotRequireCommitEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("git diff should not require commit evidence: %+v", res)
 	}
 	if res.GroundTruth == "claimed commit but no commit evidence" {
@@ -68,7 +68,7 @@ func TestShellVerifierGitStatusPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("git status should pass when shell succeeds: %+v", res)
 	}
 }
@@ -83,8 +83,8 @@ func TestShellVerifierGitCommitRequiresEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate {
-		t.Fatal("git commit without evidence should fail")
+	if res.Epistemic != verifiers.EpistemicMissing {
+		t.Fatal("git commit without evidence should be missing")
 	}
 	if res.GroundTruth != "claimed commit but no commit evidence" {
 		t.Fatalf("unexpected ground truth: %q", res.GroundTruth)
@@ -108,7 +108,7 @@ func TestShellVerifierGitLogWithPushSubstringPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("git log should not be treated as git push: %+v", res)
 	}
 }
@@ -125,8 +125,8 @@ func TestSubagentVerifierMissingDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate {
-		t.Fatal("expected missing subagents dir to fail")
+	if res.Epistemic != verifiers.EpistemicMissing {
+		t.Fatal("expected missing subagents dir")
 	}
 }
 
@@ -148,7 +148,7 @@ func TestSubagentVerifierNonEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("expected pass: %+v", res)
 	}
 }

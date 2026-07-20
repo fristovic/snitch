@@ -60,7 +60,7 @@ func TestSessionLookbackThreeTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range claims {
-		if c.ClaimType == "committed" && c.Verified < 0 && c.Severity >= 2 {
+		if c.ClaimType == "committed" && record.IsContradictedClaim(c) && c.Severity >= 2 {
 			t.Fatalf("expected commit credit from lookback, got false claim: %+v", c)
 		}
 	}
@@ -136,7 +136,7 @@ func TestSessionLookbackSubagentCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range claims {
-		if c.ClaimType == "committed" && c.Verified < 0 && c.Severity >= 2 {
+		if c.ClaimType == "committed" && record.IsContradictedClaim(c) && c.Severity >= 2 {
 			t.Fatalf("expected commit credit from subagent lookback, got false claim: %+v", c)
 		}
 	}

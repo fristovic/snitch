@@ -60,7 +60,64 @@ func TestEngineVerifiesToolCalls(t *testing.T) {
 	}
 }
 
-func TestEngineCatchesTestPassFalseClaim(t *testing.T) {
+func TestEngineTestPassNoEvidenceIsMissingNotFail(t *testing.T) {
+	dir := t.TempDir()
+	store, _ := record.Open(dir)
+	defer store.Close()
+	deviceID, _ := store.EnsureDeviceID()
+
+	bus := event.NewBus()
+	defer bus.Close()
+
+	done := make(chan struct{}, 1)
+	engine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
+	engine.OnVerified(func(p event.RunVerifiedPayload) {
+		done <- struct{}{}
+	})
+	engine.Start()
+
+	payload := capture.RunPayload{
+		RunID:         "run-missing-test",
+		ProjectPath:   t.TempDir(),
+		AssistantText: "All tests pass and everything looks good.",
+		Output:        "All tests pass",
+		StartedAt:     time.Now().Add(-time.Minute),
+		FinishedAt:    time.Now(),
+	}
+	data, _ := json.Marshal(payload)
+	bus.Publish(event.Event{Type: event.EventRunCaptured, Payload: data, ID: "run-missing-test", Timestamp: time.Now()})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for verified run")
+	}
+
+	run, _ := store.GetRunByID("run-missing-test")
+	if run == nil || run.Verdict != record.VerdictPass {
+		t.Fatalf("expected pass verdict (missing only), got %+v", run)
+	}
+
+	claims, _ := store.GetClaimsByRun("run-missing-test")
+	var testPass *record.Claim
+	for i := range claims {
+		if claims[i].ClaimType == "test_pass" {
+			testPass = &claims[i]
+			break
+		}
+	}
+	if testPass == nil {
+		t.Fatalf("expected test_pass claim, got %+v", claims)
+	}
+	if testPass.Epistemic != "missing" {
+		t.Fatalf("expected missing epistemic, got %+v", testPass)
+	}
+	if record.IsContradictedClaim(*testPass) {
+		t.Fatal("missing claim must not count as contradicted")
+	}
+}
+
+func TestEngineCatchesTestPassContradicted(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := record.Open(dir)
 	defer store.Close()
@@ -83,8 +140,14 @@ func TestEngineCatchesTestPassFalseClaim(t *testing.T) {
 		ProjectPath:   t.TempDir(),
 		AssistantText: "All tests pass and everything looks good.",
 		Output:        "All tests pass",
-		StartedAt:     time.Now().Add(-time.Minute),
-		FinishedAt:    time.Now(),
+		ToolCalls: []transcript.ToolCall{{
+			Name:    "Shell",
+			Target:  "go test ./...",
+			Result:  "FAIL\tpkg\n",
+			IsError: true,
+		}},
+		StartedAt:  time.Now().Add(-time.Minute),
+		FinishedAt: time.Now(),
 	}
 	data, _ := json.Marshal(payload)
 	bus.Publish(event.Event{Type: event.EventRunCaptured, Payload: data, ID: "run-false-claim", Timestamp: time.Now()})
@@ -98,11 +161,11 @@ func TestEngineCatchesTestPassFalseClaim(t *testing.T) {
 	claims, _ := store.GetClaimsByRun("run-false-claim")
 	found := false
 	for _, c := range claims {
-		if c.ClaimType == "test_pass" && c.Verified < 0 {
+		if c.ClaimType == "test_pass" && record.IsContradictedClaim(c) {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected test_pass false claim, got %+v", claims)
+		t.Fatalf("expected contradicted test_pass, got %+v", claims)
 	}
 }

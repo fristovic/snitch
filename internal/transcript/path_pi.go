@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -23,10 +24,46 @@ func (PiPathResolver) ProjectCwd(path string) string {
 			if inner == "" {
 				return ""
 			}
-			return "/" + strings.Join(strings.Split(inner, "-"), "/")
+			return decodePiEncodedCwd(inner)
 		}
 	}
 	return ""
+}
+
+func decodePiEncodedCwd(inner string) string {
+	if decoded := decodePiEncodedCwdGreedy(inner); decoded != "" {
+		return decoded
+	}
+	return "/" + strings.Join(strings.Split(inner, "-"), "/")
+}
+
+// decodePiEncodedCwdGreedy reconstructs a cwd from Pi's dash-encoded path by
+// preferring directory boundaries that exist on disk, so embedded dashes in
+// segment names (e.g. my-project) are preserved.
+func decodePiEncodedCwdGreedy(inner string) string {
+	segments := strings.Split(inner, "-")
+	if len(segments) == 0 {
+		return ""
+	}
+	path := "/" + segments[0]
+	i := 1
+	for i < len(segments) {
+		matched := false
+		for j := len(segments); j > i; j-- {
+			name := strings.Join(segments[i:j], "-")
+			candidate := filepath.Join(path, name)
+			if _, err := os.Stat(candidate); err == nil {
+				path = candidate
+				i = j
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return ""
+		}
+	}
+	return filepath.ToSlash(path)
 }
 
 func (PiPathResolver) ProjectDir(path string) string { return "" }

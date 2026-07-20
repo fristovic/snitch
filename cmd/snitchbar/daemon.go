@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,9 +16,10 @@ import (
 )
 
 type daemonMgr struct {
-	mu   sync.Mutex
-	cmd  *exec.Cmd
-	path string
+	mu    sync.Mutex
+	cmd   *exec.Cmd
+	path  string
+	owned bool // true when this mgr started snitchd (not merely connected to an existing one)
 }
 
 func newDaemonMgr() *daemonMgr {
@@ -84,6 +83,7 @@ func (m *daemonMgr) ensureRunning(socket string) error {
 		return err
 	}
 	m.cmd = cmd
+	m.owned = true
 
 	if !waitForSocket(socket, 10*time.Second) {
 		_ = m.stopProcessLocked()
@@ -92,11 +92,13 @@ func (m *daemonMgr) ensureRunning(socket string) error {
 	return nil
 }
 
-func (m *daemonMgr) stop(socket string) {
+func (m *daemonMgr) stop(_ string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if !m.owned {
+		return
+	}
 	_ = m.stopProcessLocked()
-	killSocketHolder(socket)
 }
 
 func (m *daemonMgr) stopProcessLocked() error {
@@ -113,28 +115,8 @@ func (m *daemonMgr) stopProcessLocked() error {
 		<-done
 	}
 	m.cmd = nil
+	m.owned = false
 	return nil
-}
-
-func killSocketHolder(socket string) {
-	out, err := exec.Command("lsof", "-t", socket).Output()
-	if err != nil {
-		return
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		pid, err := strconv.Atoi(line)
-		if err != nil {
-			continue
-		}
-		proc, _ := os.FindProcess(pid)
-		if proc != nil {
-			_ = proc.Signal(syscall.SIGTERM)
-		}
-	}
 }
 
 func waitForSocket(socket string, timeout time.Duration) bool {

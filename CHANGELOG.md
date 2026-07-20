@@ -1,6 +1,37 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-07-20
+
+Epistemic verification, calmer flagging when evidence is missing, and Snitch Bar / IPC hardening. Upgrade replaces CLI, `snitchd`, and Snitch Bar together.
+
+### Added
+
+- Per-claim **epistemic** status (`supported`, `contradicted`, `missing`) stored in SQLite (migration `010_claim_epistemic`) with backfill from legacy `verified`
+- Draft **Snitch Verification Protocol (SVP)** spec under `docs/spec/`
+- Claim **Status** line in `snitch log` / dashboard detail (Supported / Contradicted / Unverified)
+- `NewToolCall` preserves harness-native tool names (`raw_name`) while normalizing to Snitch’s canonical vocabulary
+- Codex **project cwd** resolved from rollout `session_meta` when path metadata is empty
+- Pi **project cwd** decoding that prefers real directory boundaries on disk (embedded dashes in segment names)
+- OpenCode session polling can load **only messages after** the last poll cursor
+- Subagent transcript parsing uses the **parent harness parser** (not Cursor-only)
+- IPC tests for subscribe cleanup and explicit `shared: false` on `set_label`
+
+### Changed
+
+- Verifiers distinguish **contradicted** claims from **missing evidence**; unverifiable shell/test output is usually **WARN (missing)** instead of FAIL
+- Run verdicts and stats use epistemic **contradicted** (not “could not verify”) for false-claim counts
+- Unified shell/git evidence helpers (`shell_eval.go`); shell verifier no longer delegates through `ContradictionVerifier`
+- Snitch Bar **single-flight** daemon start; reconnect no longer spawns overlapping `startWatching` goroutines
+- Snitch Bar **stop** only terminates `snitchd` it started — no `lsof` kill of unrelated daemons on the socket
+- `set_label` / `add_missed_claim`: explicit **`shared: false`** overrides `telemetry.share_by_default`
+- IPC **subscribe** unsubscribes and closes channels when the client disconnects
+- Broader **test-file** path heuristics in consistency checks (`__tests__/`, `.spec.`, etc.)
+- User guide and harness extension docs updated for epistemic behavior
+
+### Fixed
+
+- IPC subscribe connections could leak subscriber goroutines after disconnect
+- False positives when agents claimed success but shell output was not captured (now **missing**, not contradicted, where appropriate)
 
 ## 0.4.2 — 2026-07-10
 

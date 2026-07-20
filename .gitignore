@@ -26,6 +26,12 @@
 # GoReleaser
 /dist/
 
+# ML / classifier (entire directory — scripts + models + data)
+/ml/
+
+# Hermes
+.hermes/
+
 # Local planning docs (not published)
 /docs/plans/
 /docs/stresstest/

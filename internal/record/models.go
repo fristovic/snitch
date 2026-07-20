@@ -79,6 +79,7 @@ type Claim struct {
 	ClaimSentence string    `json:"claim_sentence,omitempty"` // full sentence containing match
 	ClaimContext  string    `json:"claim_context,omitempty"`  // capped surrounding sentences
 	Verified      int       `json:"verified"`
+	Epistemic     string    `json:"epistemic,omitempty"`
 	Severity      int       `json:"severity"`
 	Verifier      string    `json:"verifier,omitempty"`
 	Evidence      []string  `json:"evidence,omitempty"`

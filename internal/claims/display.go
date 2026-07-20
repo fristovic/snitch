@@ -21,6 +21,7 @@ type DisplayFields struct {
 	Target        string
 	Verifier      string
 	Severity      int
+	Epistemic     string
 }
 
 // FromRecord builds DisplayFields from a persisted claim.
@@ -36,6 +37,26 @@ func FromRecord(c record.Claim) DisplayFields {
 		Target:        c.Target,
 		Verifier:      c.Verifier,
 		Severity:      c.Severity,
+		Epistemic:     record.ClaimEpistemic(c),
+	}
+}
+
+// EpistemicLabel returns a short label for the claim's epistemic status.
+func EpistemicLabel(epistemic string) string {
+	switch epistemic {
+	case "supported":
+		return "Supported"
+	case "contradicted":
+		return "Contradicted"
+	case "missing":
+		return "Unverified"
+	case "stale":
+		return "Stale"
+	default:
+		if epistemic == "" {
+			return ""
+		}
+		return epistemic
 	}
 }
 
@@ -205,6 +226,11 @@ func RichDetail(d DisplayFields) string {
 	if actual := strings.TrimSpace(d.Actual); actual != "" {
 		b.WriteString("Checked: ")
 		b.WriteString(textutil.OneLine(actual, 160))
+		b.WriteByte('\n')
+	}
+	if label := EpistemicLabel(d.Epistemic); label != "" {
+		b.WriteString("Status: ")
+		b.WriteString(label)
 		b.WriteByte('\n')
 	}
 	if d.Verifier != "" || d.Severity > 0 {

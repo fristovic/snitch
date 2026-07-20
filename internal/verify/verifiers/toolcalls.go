@@ -91,7 +91,7 @@ func isTestCommand(cmd string) bool {
 	lower := strings.ToLower(strings.TrimSpace(cmd))
 	patterns := []string{
 		"go test", "pytest", "npm test", "yarn test", "pnpm test",
-		"jest", "cargo test", "make test", "phpunit", "bundle exec rspec",
+		"jest", "vitest", "cargo test", "make test", "phpunit", "bundle exec rspec",
 	}
 	for _, p := range patterns {
 		if strings.Contains(lower, p) {

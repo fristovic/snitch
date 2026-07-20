@@ -27,10 +27,10 @@ func (v *FileVerifier) CanHandle(c Claim) bool {
 }
 
 func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
-	r := Result{Claim: c, Verifier: v.Name(), Severity: severity.Level0}
+	r := Result{Claim: c, Verifier: v.Name(), Epistemic: EpistemicSupported, Severity: severity.Level0}
 	path := resolveClaimPath(c.Target, ctx.Cwd)
 	if path == "" {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level1
 		r.GroundTruth = "no path in tool call"
 		return r, nil
@@ -40,23 +40,21 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	case ClaimToolDelete:
 		_, err := os.Stat(path)
 		if os.IsNotExist(err) {
-			r.Accurate = true
 			r.GroundTruth = "file deleted"
 			return r, nil
 		}
-		r.Accurate = false
+		r.Epistemic = EpistemicContradicted
 		r.Severity = severity.Level2
 		r.GroundTruth = "file still exists"
 		return r, nil
 
 	case ClaimToolRead:
 		if _, err := os.Stat(path); err != nil {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = severity.Level1
 			r.GroundTruth = "file does not exist"
 			return r, nil
 		}
-		r.Accurate = true
 		r.GroundTruth = "file exists"
 		r.Evidence = []string{path}
 		return r, nil
@@ -72,14 +70,13 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 			pattern = filepath.Join(ctx.Cwd, pattern)
 		}
 		matches, _ := filepath.Glob(pattern)
-		r.Accurate = true
 		r.GroundTruth = "glob matched " + strconv.Itoa(len(matches)) + " paths"
 		return r, nil
 
 	case ClaimToolStrReplace:
 		info, err := os.Stat(path)
 		if err != nil {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = severity.Level3
 			r.GroundTruth = "file does not exist"
 			return r, nil
@@ -88,19 +85,18 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		if newStr != "" {
 			data, err := os.ReadFile(path)
 			if err != nil {
-				r.Accurate = false
+				r.Epistemic = EpistemicMissing
 				r.Severity = severity.Level2
 				r.GroundTruth = "cannot read file"
 				return r, nil
 			}
 			if !strings.Contains(string(data), newStr) {
-				r.Accurate = false
+				r.Epistemic = EpistemicContradicted
 				r.Severity = severity.Level2
 				r.GroundTruth = "new_string not found in file"
 				return r, nil
 			}
 		}
-		r.Accurate = true
 		r.GroundTruth = "file exists (" + formatSize(info.Size()) + " bytes), content check passed"
 		r.Evidence = []string{path}
 		return r, nil
@@ -108,18 +104,17 @@ func (v *FileVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	case ClaimToolWrite:
 		info, err := os.Stat(path)
 		if err != nil {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = severity.Level3
 			r.GroundTruth = "file does not exist"
 			return r, nil
 		}
 		if info.Size() < 10 {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = severity.Level2
 			r.GroundTruth = "file exists but is empty or trivial"
 			return r, nil
 		}
-		r.Accurate = true
 		r.GroundTruth = "file exists (" + formatSize(info.Size()) + " bytes)"
 		r.Evidence = []string{path}
 		return r, nil

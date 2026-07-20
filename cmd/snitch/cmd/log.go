@@ -120,7 +120,7 @@ func printRunDetail(client *ipc.Client, runID string) error {
 		fmt.Println("Summary:", summary)
 	}
 	for _, c := range resp.Claims {
-		if c.Severity < int(severity.Level2) && c.Verified > 0 {
+		if !record.ShowClaimInDetail(c, int(severity.Level2)) {
 			continue
 		}
 		fmt.Println()
@@ -132,7 +132,7 @@ func printRunDetail(client *ipc.Client, runID string) error {
 func failureSummary(runClaims []record.Claim) string {
 	var parts []string
 	for _, c := range runClaims {
-		if c.Severity < int(severity.Level2) && c.Verified > 0 {
+		if !record.ShowClaimInDetail(c, int(severity.Level2)) {
 			continue
 		}
 		d := claims.FromRecord(c)

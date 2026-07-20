@@ -29,8 +29,9 @@ type trayApp struct {
 	socket string
 	daemon *daemonMgr
 
-	mu    sync.Mutex
-	state MenuState
+	mu      sync.Mutex
+	startMu sync.Mutex
+	state   MenuState
 
 	refreshCh chan struct{}
 
@@ -147,6 +148,9 @@ func (a *trayApp) handleClicks() {
 }
 
 func (a *trayApp) startWatching() {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
 	a.mu.Lock()
 	a.state.Paused = false
 	a.state.Starting = true
@@ -248,7 +252,7 @@ func (a *trayApp) watchLoop() {
 			a.state.Alert = false
 			a.mu.Unlock()
 			a.signalRefresh()
-			go a.startWatching()
+			a.startWatching()
 		}
 		time.Sleep(3 * time.Second)
 	}

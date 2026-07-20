@@ -43,3 +43,12 @@ func canonicalToolName(raw string, overrides map[string]string) string {
 	}
 	return raw
 }
+
+// NewToolCall builds a ToolCall with RawName set to the harness-native name and
+// Name set to the Snitch canonical vocabulary.
+func NewToolCall(raw string, overrides map[string]string) ToolCall {
+	return ToolCall{
+		RawName: raw,
+		Name:    canonicalToolName(raw, overrides),
+	}
+}

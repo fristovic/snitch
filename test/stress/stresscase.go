@@ -159,7 +159,7 @@ func runOneTurn(store *record.Store, deviceID string, sc StressCase, projectDir 
 		if c.ClaimType != claimType {
 			continue
 		}
-		if c.Verified < 0 && c.Severity >= 2 {
+		if record.IsContradictedClaim(*c) && c.Severity >= 2 {
 			res.MatchedFlagged = true
 			cp := *c
 			res.MatchedClaim = &cp

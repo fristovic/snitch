@@ -17,6 +17,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// sqlContradictedClaim matches contradicted rows and legacy verified=-1 rows.
+const sqlContradictedClaim = `(c.epistemic = 'contradicted' OR (COALESCE(c.epistemic, '') = '' AND c.verified = -1))`
+
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
@@ -179,15 +182,15 @@ func (s *Store) UnsyncedLabels(limit int) ([]RunLabel, error) {
 	}
 	rows, err := s.db.Query(`
 		SELECT r.id, r.harness, r.model, r.label_verdict, r.label_timestamp, r.verdict,
-		       (SELECT c.claim_type FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		       (SELECT c.claim_type FROM claims c WHERE c.run_id = r.id AND `+sqlContradictedClaim+`
 		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_claim_type,
-		       (SELECT c.claimed FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		       (SELECT c.claimed FROM claims c WHERE c.run_id = r.id AND `+sqlContradictedClaim+`
 		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_claimed,
-		       (SELECT c.actual FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		       (SELECT c.actual FROM claims c WHERE c.run_id = r.id AND `+sqlContradictedClaim+`
 		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_actual,
-		       (SELECT COALESCE(NULLIF(c.claim_sentence, ''), c.claimed) FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		       (SELECT COALESCE(NULLIF(c.claim_sentence, ''), c.claimed) FROM claims c WHERE c.run_id = r.id AND `+sqlContradictedClaim+`
 		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_sentence,
-		       (SELECT COALESCE(c.claim_context, '') FROM claims c WHERE c.run_id = r.id AND c.verified = -1
+		       (SELECT COALESCE(c.claim_context, '') FROM claims c WHERE c.run_id = r.id AND `+sqlContradictedClaim+`
 		        ORDER BY c.severity DESC, c.id DESC LIMIT 1) AS top_context
 		FROM runs r
 		WHERE r.label_shared = 1 AND r.label_synced = 0 AND r.label_verdict != ''
@@ -338,11 +341,11 @@ func (s *Store) InsertClaims(claims []Claim) error {
 	for _, c := range claims {
 		ev, _ := json.Marshal(c.Evidence)
 		_, err := s.db.Exec(`
-			INSERT INTO claims (run_id, claim_type, source, target, claimed, actual, claim_sentence, claim_context, verified, severity, verifier, evidence, confidence)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO claims (run_id, claim_type, source, target, claimed, actual, claim_sentence, claim_context, verified, epistemic, severity, verifier, evidence, confidence)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			c.RunID, c.ClaimType, c.Source, scrub.Scrub(c.Target), scrub.Scrub(c.Claimed),
 			scrub.Scrub(c.Actual), scrub.Scrub(c.ClaimSentence), scrub.Scrub(c.ClaimContext),
-			c.Verified, c.Severity, c.Verifier, string(ev), c.Confidence)
+			c.Verified, c.Epistemic, c.Severity, c.Verifier, string(ev), c.Confidence)
 		if err != nil {
 			return err
 		}
@@ -487,7 +490,7 @@ func (s *Store) GetClaimsByRun(runID string) ([]Claim, error) {
 	rows, err := s.db.Query(`
 		SELECT id, run_id, claim_type, source, target, claimed, actual,
 			COALESCE(claim_sentence, ''), COALESCE(claim_context, ''),
-			verified, severity, verifier, evidence, confidence, created_at
+			verified, COALESCE(epistemic, ''), severity, verifier, evidence, confidence, created_at
 		FROM claims WHERE run_id=? ORDER BY id`, runID)
 	if err != nil {
 		return nil, err
@@ -509,7 +512,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]ClaimWithRun, error) {
 	q := `
 		SELECT c.id, c.run_id, c.claim_type, c.source, c.target, c.claimed, c.actual,
 			COALESCE(c.claim_sentence, ''), COALESCE(c.claim_context, ''),
-			c.verified, c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
+			c.verified, COALESCE(c.epistemic, ''), c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
 			r.project_path, r.session_id, r.command, r.created_at, r.verdict
 		FROM claims c
 		JOIN runs r ON c.run_id = r.id
@@ -520,7 +523,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]ClaimWithRun, error) {
 		args = append(args, minSev)
 	}
 	if filter.FalseClaimsOnly {
-		q += " AND c.verified = -1"
+		q += " AND " + sqlContradictedClaim
 	}
 	if filter.ClaimType != "" {
 		q += " AND c.claim_type = ?"
@@ -559,7 +562,7 @@ func (s *Store) GetClaims(filter ClaimFilter) ([]ClaimWithRun, error) {
 		var lc ClaimWithRun
 		var ev, created, runCreated, verdict string
 		if err := rows.Scan(&lc.ID, &lc.RunID, &lc.ClaimType, &lc.Source, &lc.Target, &lc.Claimed,
-			&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
+			&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Epistemic, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
 			&lc.ProjectPath, &lc.SessionID, &lc.RunCommand, &runCreated, &verdict); err != nil {
 			return nil, err
 		}
@@ -578,17 +581,17 @@ func (s *Store) GetLatestTopFalseClaim() (*ClaimWithRun, error) {
 	row := s.db.QueryRow(`
 		SELECT c.id, c.run_id, c.claim_type, c.source, c.target, c.claimed, c.actual,
 		       COALESCE(c.claim_sentence, ''), COALESCE(c.claim_context, ''),
-		       c.verified, c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
+		       c.verified, COALESCE(c.epistemic, ''), c.severity, c.verifier, c.evidence, c.confidence, c.created_at,
 		       r.project_path, r.session_id, r.command, r.created_at, r.verdict
 		FROM claims c
 		JOIN runs r ON r.id = c.run_id
-		WHERE c.verified = -1
+		WHERE ` + sqlContradictedClaim + `
 		ORDER BY r.created_at DESC, c.severity DESC, c.id DESC
 		LIMIT 1`)
 	var lc ClaimWithRun
 	var ev, created, runCreated, verdict string
 	err := row.Scan(&lc.ID, &lc.RunID, &lc.ClaimType, &lc.Source, &lc.Target, &lc.Claimed,
-		&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
+		&lc.Actual, &lc.ClaimSentence, &lc.ClaimContext, &lc.Verified, &lc.Epistemic, &lc.Severity, &lc.Verifier, &ev, &lc.Confidence, &created,
 		&lc.ProjectPath, &lc.SessionID, &lc.RunCommand, &runCreated, &verdict)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -611,7 +614,7 @@ func (s *Store) ClaimStats() (ClaimStats, error) {
 
 	rows, err := s.db.Query(`
 		SELECT claim_type, COUNT(*) FROM claims
-		WHERE verified = -1 AND severity >= 2
+		WHERE (epistemic = 'contradicted' OR (COALESCE(epistemic, '') = '' AND verified = -1)) AND severity >= 2
 		GROUP BY claim_type ORDER BY COUNT(*) DESC`)
 	if err != nil {
 		return stats, err
@@ -730,7 +733,7 @@ func scanClaims(rows *sql.Rows) ([]Claim, error) {
 		var ev string
 		var created string
 		if err := rows.Scan(&c.ID, &c.RunID, &c.ClaimType, &c.Source, &c.Target, &c.Claimed,
-			&c.Actual, &c.ClaimSentence, &c.ClaimContext, &c.Verified, &c.Severity, &c.Verifier, &ev, &c.Confidence, &created); err != nil {
+			&c.Actual, &c.ClaimSentence, &c.ClaimContext, &c.Verified, &c.Epistemic, &c.Severity, &c.Verifier, &ev, &c.Confidence, &created); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(ev), &c.Evidence)

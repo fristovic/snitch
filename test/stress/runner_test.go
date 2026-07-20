@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fristovic/snitch/internal/record"
 )
 
 func TestStressMatrix(t *testing.T) {
@@ -30,7 +32,7 @@ func TestStressMatrix(t *testing.T) {
 					t.Errorf("  claimed: %q actual: %q sev=%d", got.MatchedClaim.Claimed, got.MatchedClaim.Actual, got.MatchedClaim.Severity)
 				}
 				for _, c := range got.Claims {
-					if c.Verified < 0 && c.Severity >= 2 {
+					if record.IsContradictedClaim(c) && c.Severity >= 2 {
 						t.Logf("  flagged claim: type=%s claimed=%q actual=%q", c.ClaimType, c.Claimed, c.Actual)
 					}
 				}

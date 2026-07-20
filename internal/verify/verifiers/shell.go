@@ -26,13 +26,13 @@ func (v *ShellVerifier) CanHandle(c Claim) bool {
 }
 
 func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
-	r := Result{Claim: c, Verifier: v.Name(), Severity: severity.Level0}
+	r := Result{Claim: c, Verifier: v.Name(), Epistemic: EpistemicSupported, Severity: severity.Level0}
 	cmd, _ := c.Input["command"].(string)
 	if cmd == "" {
 		cmd = c.Target
 	}
 	if strings.TrimSpace(cmd) == "" {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level1
 		r.GroundTruth = "empty shell command"
 		return r, nil
@@ -52,31 +52,10 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		if ShellCommand(tc) != cmd && tc.Target != cmd {
 			continue
 		}
-		out, code, found := ShellOutputForCommand(tc, ctx)
-		if found {
-			if code != 0 || tc.IsError {
-				r.Accurate = false
-				r.Severity = severity.Level2
-				r.GroundTruth = "shell command failed"
-				r.Evidence = []string{truncateEvidence(out)}
-				return r, nil
-			}
-			if strings.Contains(strings.ToLower(cmd), "test") {
-				if passed, ok := ParseTestOutput(out); ok {
-					if passed {
-						r.Accurate = true
-						r.GroundTruth = "test output indicates pass"
-					} else {
-						r.Accurate = false
-						r.Severity = severity.Level2
-						r.GroundTruth = "test output indicates failure"
-					}
-					return r, nil
-				}
-			}
-			r.Accurate = true
-			r.GroundTruth = "shell command succeeded"
-			return r, nil
+		if eval, ok := EvaluateCapturedShellCommand(cmd, tc, ctx, severity.Level2); ok {
+			eval.Claim = c
+			eval.Verifier = v.Name()
+			return eval, nil
 		}
 	}
 
@@ -84,10 +63,9 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	if found {
 		if strings.Contains(strings.ToLower(cmd), "test") {
 			if passed {
-				r.Accurate = true
 				r.GroundTruth = "test output indicates pass"
 			} else {
-				r.Accurate = false
+				r.Epistemic = EpistemicContradicted
 				r.Severity = severity.Level2
 				r.GroundTruth = "test output indicates failure"
 			}
@@ -101,8 +79,8 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	}
 	if v.AllowRerun != nil && v.AllowRerun[cwd] {
 		code := rerunCommand(cmd, cwd)
-		r.Accurate = code == 0
 		if code != 0 {
+			r.Epistemic = EpistemicContradicted
 			r.Severity = severity.Level2
 			r.GroundTruth = "re-run exited with code " + formatSize(int64(code))
 		} else {
@@ -111,8 +89,8 @@ func (v *ShellVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 		return r, nil
 	}
 
-	r.Accurate = true
-	r.Severity = severity.Level0
+	r.Epistemic = EpistemicMissing
+	r.Severity = severity.Level1
 	r.GroundTruth = "command syntax valid (re-run not enabled)"
 	return r, nil
 }
@@ -126,17 +104,21 @@ func isGitPushCommand(cmd string) bool {
 }
 
 func (v *ShellVerifier) verifyGitCommitShell(cmd string, ctx VerifyContext) (Result, error) {
-	cv := &ContradictionVerifier{}
-	return cv.Verify(Claim{
+	claim := Claim{
 		Type:        ClaimCommitted,
 		Source:      "tool",
 		Description: cmd,
-	}, ctx)
+	}
+	return VerifyCommitEvidence(ctx, v.Name(), claim), nil
 }
 
 func (v *ShellVerifier) verifyGitPushShell(cmd string, ctx VerifyContext) (Result, error) {
-	cv := &ContradictionVerifier{}
-	return cv.Verify(Claim{Type: ClaimPushed, Source: "prose", Description: cmd}, ctx)
+	claim := Claim{
+		Type:        ClaimPushed,
+		Source:      "tool",
+		Description: cmd,
+	}
+	return VerifyPushEvidence(ctx, v.Name(), claim), nil
 }
 
 func parseTestOutput(output string) (passed bool, found bool) {

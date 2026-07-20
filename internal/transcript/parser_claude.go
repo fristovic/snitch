@@ -76,7 +76,8 @@ func (ClaudeParser) ParseLine(line string) (ParsedLine, bool) {
 			case "thinking":
 				// Skip — thinking blocks are not prose claims.
 			case "tool_use":
-				tc := ToolCall{Name: canonicalToolName(c.Name, claudeToolNames), ToolUseID: c.ID}
+				tc := NewToolCall(c.Name, claudeToolNames)
+				tc.ToolUseID = c.ID
 				if len(c.Input) > 0 {
 					_ = json.Unmarshal(c.Input, &tc.Input)
 				}

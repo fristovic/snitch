@@ -136,9 +136,20 @@ Verifier: file (sev 2)
 
 | Verdict | When you see it |
 | ------- | ---------------- |
-| **pass** | No material contradictions (max severity ≤ 1). |
-| **warn** | Partial / medium problems (max severity 2) — e.g. a tool edit that didn’t land, or a softer mismatch. Menu-bar alerts and notifications default to **fail** only. |
-| **fail** | High-confidence false claim (max severity 3) — typically prose like “all tests pass” contradicted by evidence. |
+| **pass** | No contradicted claims at severity 3 (missing evidence alone does not fail a run). |
+| **warn** | Contradicted claims at severity 2 only — e.g. a tool edit that didn’t land. Menu-bar alerts and notifications default to **fail** only. |
+| **fail** | A contradicted claim at severity 3 — e.g. “all tests pass” while test output shows failure. |
+
+#### Epistemic status (`epistemic`)
+
+Each claim has an evidence verdict separate from severity:
+
+| epistemic | Meaning |
+| --------- | ------- |
+| **supported** | Evidence backs the claim. |
+| **contradicted** | Evidence refutes the claim (counts toward false-claim stats and run **fail** when severity is 3). |
+| **missing** | Required evidence was absent or incomplete (may still show at severity 2 in logs; does not fail the run). |
+| **stale** | Reserved for a future release (not emitted yet). |
 
 #### Severity (`sev`)
 

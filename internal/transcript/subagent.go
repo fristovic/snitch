@@ -40,7 +40,7 @@ func LoadSubagentToolCalls(parentPath string, windowStart, windowEnd time.Time) 
 			}
 		}
 		path := filepath.Join(subDir, e.Name())
-		calls, err := toolCallsInWindow(path, windowStart, windowEnd, modTime)
+		calls, err := toolCallsInWindow(path, windowStart, windowEnd, modTime, parserForParent(parentPath))
 		if err != nil {
 			continue
 		}
@@ -56,8 +56,16 @@ func LoadSubagentToolCalls(parentPath string, windowStart, windowEnd time.Time) 
 	return merged, nil
 }
 
-func toolCallsInWindow(path string, windowStart, windowEnd, fileModTime time.Time) ([]ToolCall, error) {
-	lines, _, err := ParseLinesWith(CursorParser{}, path, 0)
+func parserForParent(parentPath string) TranscriptParser {
+	parser, _, ok := ParserFor(GuessHarness(parentPath))
+	if ok {
+		return parser
+	}
+	return CursorParser{}
+}
+
+func toolCallsInWindow(path string, windowStart, windowEnd, fileModTime time.Time, parser TranscriptParser) ([]ToolCall, error) {
+	lines, _, err := ParseLinesWith(parser, path, 0)
 	if err != nil {
 		return nil, err
 	}

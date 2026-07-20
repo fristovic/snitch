@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 
 	"github.com/fristovic/snitch/internal/event"
 
@@ -213,11 +211,12 @@ func loadOpenCodeSessions(db *sql.DB) (map[string]string, error) {
 //     rows (Cursor-style marker)
 //
 // Every line carries the DB event time so turn timestamps and the poll
-// cursor reflect reality rather than poll wall-clock time.
-func openCodeSessionLines(db *sql.DB, sessionID string) ([]ParsedLine, error) {
+// cursor reflect reality rather than poll wall-clock time. When sinceMs > 0,
+// only messages created after that timestamp are loaded.
+func openCodeSessionLines(db *sql.DB, sessionID string, sinceMs int64) ([]ParsedLine, error) {
 	// Join message → part, extract role/finish from message JSON data. Order by
 	// message time then part time so parts group under their parent message.
-	rows, err := db.Query(`
+	query := `
 		SELECT m.id,
 		       json_extract(m.data,'$.role'),
 		       json_extract(m.data,'$.finish'),
@@ -225,8 +224,14 @@ func openCodeSessionLines(db *sql.DB, sessionID string) ([]ParsedLine, error) {
 		       p.id, p.data, p.time_created
 		FROM message m
 		LEFT JOIN part p ON p.message_id = m.id
-		WHERE m.session_id = ?
-		ORDER BY m.time_created ASC, p.time_created ASC`, sessionID)
+		WHERE m.session_id = ?`
+	args := []any{sessionID}
+	if sinceMs > 0 {
+		query += ` AND m.time_created > ?`
+		args = append(args, sinceMs)
+	}
+	query += ` ORDER BY m.time_created ASC, p.time_created ASC`
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +312,7 @@ func openCodeSessionLines(db *sql.DB, sessionID string) ([]ParsedLine, error) {
 // discarded and re-assembled by a later poll once it completes. Returns the
 // emitted turns and the max event time covered by them (0 when none).
 func rebuildOpenCodeTurns(db *sql.DB, sessionID, projectCwd string, since int64) ([]TurnCompleted, int64, error) {
-	lines, err := openCodeSessionLines(db, sessionID)
+	lines, err := openCodeSessionLines(db, sessionID, since)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -396,11 +401,7 @@ func decodeOpenCodePart(dataJSON string) (ptype, text string, tc ToolCall) {
 			} `json:"state"`
 		}
 		_ = json.Unmarshal([]byte(dataJSON), &tool)
-		name := lowercaseToolNames[tool.Tool]
-		if name == "" {
-			name = cases.Title(language.English).String(tool.Tool)
-		}
-		tc.Name = name
+		tc = NewToolCall(tool.Tool, nil)
 		tc.ToolUseID = tool.CallID
 		if len(tool.State.Input) > 0 {
 			_ = json.Unmarshal(tool.State.Input, &tc.Input)

@@ -170,20 +170,25 @@ func (e *Engine) process(ev event.Event) {
 			if res.Verifier == "" {
 				res.Verifier = v.Name()
 			}
-			if best.Verifier == "" || res.Severity > best.Severity || (res.Accurate && !best.Accurate) {
+			if best.Verifier == "" {
 				best = res
+			} else {
+				best = verifiers.PreferWorseResult(best, res)
 			}
 		}
 		if best.Verifier == "" {
 			continue
 		}
-		best.Severity = ApplyClaimPolicy(best.Severity, claim, best.Accurate, vctx)
-		if best.Accurate {
+		best.Severity = ApplyClaimPolicy(best.Severity, claim, best.Epistemic, vctx)
+		if best.Epistemic == verifiers.EpistemicMissing && best.Severity > severity.Level2 {
+			best.Severity = severity.Level2
+		}
+		if best.Epistemic == verifiers.EpistemicSupported {
 			verified++
-		} else if best.Severity >= severity.Level2 {
+		} else if best.Epistemic == verifiers.EpistemicContradicted && best.Severity >= severity.Level2 {
 			falseClaims++
 		}
-		if best.Severity > maxSev {
+		if best.Epistemic == verifiers.EpistemicContradicted && best.Severity > maxSev {
 			maxSev = best.Severity
 		}
 		claimed := claim.Quote
@@ -199,7 +204,8 @@ func (e *Engine) process(ev event.Event) {
 			Actual:        best.GroundTruth,
 			ClaimSentence: claim.Sentence,
 			ClaimContext:  claim.Context,
-			Verified:      boolToVerified(best.Accurate),
+			Verified:      verifiers.EpistemicToVerified(best.Epistemic),
+			Epistemic:     string(best.Epistemic),
 			Severity:      int(best.Severity),
 			Verifier:      best.Verifier,
 			Evidence:      best.Evidence,
@@ -314,13 +320,6 @@ func (e *Engine) emitVerified(p event.RunVerifiedPayload) {
 	if e.onVerified != nil {
 		e.onVerified(p)
 	}
-}
-
-func boolToVerified(ok bool) int {
-	if ok {
-		return 1
-	}
-	return -1
 }
 
 func itoa(n int) string {

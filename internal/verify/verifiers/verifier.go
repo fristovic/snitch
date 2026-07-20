@@ -123,10 +123,20 @@ func AllToolCalls(ctx VerifyContext) []transcript.ToolCall {
 	return ctx.ToolCalls
 }
 
+// Epistemic is the evidence-backed status of a claim.
+type Epistemic string
+
+const (
+	EpistemicSupported    Epistemic = "supported"
+	EpistemicContradicted Epistemic = "contradicted"
+	EpistemicMissing      Epistemic = "missing"
+	EpistemicStale        Epistemic = "stale" // reserved; not emitted yet
+)
+
 // Result is a verification outcome.
 type Result struct {
 	Claim       Claim
-	Accurate    bool
+	Epistemic   Epistemic
 	GroundTruth string
 	Severity    severity.Level
 	Evidence    []string

@@ -95,7 +95,55 @@ func TestPipelineParseVerifyStore(t *testing.T) {
 	}
 }
 
-func TestPipelineTestPassFalseClaimEndToEnd(t *testing.T) {
+func TestPipelineTestPassMissingDoesNotFailRun(t *testing.T) {
+	dir := t.TempDir()
+	store, err := record.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	deviceID, _ := store.EnsureDeviceID()
+
+	bus := event.NewBus()
+	defer bus.Close()
+
+	capEngine := capture.New(bus)
+	capEngine.Start()
+	defer capEngine.Stop()
+
+	verifyEngine := verify.NewEngine(bus, store, config.Default().Verification, deviceID, nil)
+	verifyEngine.Start()
+
+	turn := transcript.TurnCompleted{
+		RunID:         "run-missing-test-e2e",
+		ProjectPath:   t.TempDir(),
+		UserText:      "run tests",
+		AssistantText: "All tests pass. You're good to go.",
+		StartedAt:     time.Now().Add(-time.Minute),
+		FinishedAt:    time.Now(),
+	}
+	payload, _ := json.Marshal(turn)
+	bus.Publish(event.Event{
+		ID: turn.RunID, Timestamp: turn.FinishedAt, Source: "test",
+		Type: event.EventTurnCompleted, Payload: payload,
+	})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		run, _ := store.GetRunByID("run-missing-test-e2e")
+		if run != nil && run.Verdict != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	run, _ := store.GetRunByID("run-missing-test-e2e")
+	if run == nil || run.Verdict != record.VerdictPass {
+		t.Fatalf("expected pass verdict for missing-only test_pass, got %+v", run)
+	}
+}
+
+func TestPipelineTestPassContradictedFailsRun(t *testing.T) {
 	dir := t.TempDir()
 	store, err := record.Open(dir)
 	if err != nil {
@@ -119,8 +167,14 @@ func TestPipelineTestPassFalseClaimEndToEnd(t *testing.T) {
 		ProjectPath:   t.TempDir(),
 		UserText:      "run tests",
 		AssistantText: "All tests pass. You're good to go.",
-		StartedAt:     time.Now().Add(-time.Minute),
-		FinishedAt:    time.Now(),
+		ToolCalls: []transcript.ToolCall{{
+			Name:    "Shell",
+			Target:  "go test ./...",
+			Result:  "FAIL\n",
+			IsError: true,
+		}},
+		StartedAt:  time.Now().Add(-time.Minute),
+		FinishedAt: time.Now(),
 	}
 	payload, _ := json.Marshal(turn)
 	bus.Publish(event.Event{
@@ -144,6 +198,6 @@ func TestPipelineTestPassFalseClaimEndToEnd(t *testing.T) {
 
 	claims, _ := store.GetClaims(record.ClaimFilter{FalseClaimsOnly: true, ClaimType: "test_pass"})
 	if len(claims) == 0 {
-		t.Fatal("expected test_pass false claim via get_claims filter")
+		t.Fatal("expected contradicted test_pass via get_claims filter")
 	}
 }

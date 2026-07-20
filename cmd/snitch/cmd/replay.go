@@ -84,7 +84,7 @@ harness parser before opening a PR.`,
 				totalClaims += len(runClaims)
 				printed := false
 				for _, c := range runClaims {
-					isFlagged := c.Verified < 0
+					isFlagged := record.IsContradictedClaim(c) && c.Severity >= 2
 					if isFlagged {
 						flagged++
 					}

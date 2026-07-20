@@ -13,6 +13,7 @@ import (
 // tool names to these canonical names at ingestion.
 type ToolCall struct {
 	ToolUseID string                     `json:"tool_use_id,omitempty"`
+	RawName   string                     `json:"raw_name,omitempty"` // harness-native tool name before normalization
 	Name      string                     `json:"name"`
 	Input     map[string]json.RawMessage `json:"input"`
 	Target    string                     `json:"target"`
@@ -130,7 +131,8 @@ func parseCursorLine(line string) (ParsedLine, bool) {
 				pl.Text += c.Text
 			}
 		case "tool_use":
-			tc := ToolCall{Name: c.Name, ToolUseID: c.ID}
+			tc := NewToolCall(c.Name, nil)
+			tc.ToolUseID = c.ID
 			if len(c.Input) > 0 {
 				_ = json.Unmarshal(c.Input, &tc.Input)
 			}

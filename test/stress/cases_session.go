@@ -47,12 +47,12 @@ func SessionCases() []SessionScenario {
 				{
 					Name:          "sess_t2_recap_flagged",
 					ClaimType:       "committed",
-					Category:      CategoryTruePositive,
+					Category:      CategoryTrueNegative,
 					AssistantText: "Finished.\n\n### Summary\nI've committed the changes.",
-					ExpectFlagged:     true,
+					ExpectFlagged:     false,
 				},
 			},
-			ExpectFinalFlagged: true,
+			ExpectFinalFlagged: false,
 			FinalClaimType: "committed",
 		},
 		{

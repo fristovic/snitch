@@ -19,9 +19,9 @@ func (v *SubagentVerifier) CanHandle(c Claim) bool {
 }
 
 func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
-	r := Result{Claim: c, Verifier: v.Name(), Severity: severity.Level0}
+	r := Result{Claim: c, Verifier: v.Name(), Epistemic: EpistemicSupported, Severity: severity.Level0}
 	if ctx.TranscriptPath == "" {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level2
 		r.GroundTruth = "no parent transcript path"
 		return r, nil
@@ -30,7 +30,7 @@ func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	subDir := filepath.Join(filepath.Dir(ctx.TranscriptPath), "subagents")
 	entries, err := os.ReadDir(subDir)
 	if err != nil {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level2
 		r.GroundTruth = "subagents directory missing"
 		return r, nil
@@ -64,13 +64,13 @@ func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 	}
 
 	if nonEmpty == 0 {
-		r.Accurate = false
+		r.Epistemic = EpistemicContradicted
 		r.Severity = severity.Level1
 		r.GroundTruth = "subagent transcripts empty"
 		return r, nil
 	}
 	if nonEmpty < taskCount {
-		r.Accurate = false
+		r.Epistemic = EpistemicContradicted
 		r.Severity = severity.Level2
 		r.GroundTruth = "fewer subagent transcripts than Task calls"
 		return r, nil
@@ -78,14 +78,21 @@ func (v *SubagentVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
 
 	merged, _ := transcript.LoadSubagentToolCalls(ctx.TranscriptPath, ctx.StartedAt, ctx.FinishedAt)
 	if taskCount > 0 && len(merged) == 0 && !ctx.StartedAt.IsZero() && !ctx.FinishedAt.IsZero() {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level1
 		r.GroundTruth = "subagent transcripts exist but no tool calls in turn window"
 		return r, nil
 	}
 
-	r.Accurate = true
-	r.GroundTruth = transcript.CursorPathResolver{}.SessionID(ctx.TranscriptPath) + ": " +
+	harness := ctx.Harness
+	if harness == "" {
+		harness = transcript.GuessHarness(ctx.TranscriptPath)
+	}
+	_, resolver, ok := transcript.ParserFor(harness)
+	if !ok {
+		resolver = transcript.CursorPathResolver{}
+	}
+	r.GroundTruth = resolver.SessionID(ctx.TranscriptPath) + ": " +
 		formatSize(int64(nonEmpty)) + " subagent transcript(s)"
 	return r, nil
 }

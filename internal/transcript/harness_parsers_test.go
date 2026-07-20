@@ -54,6 +54,9 @@ func TestClaudeParser(t *testing.T) {
 	if !hasToolNamed(toolCalls, "Shell") {
 		t.Errorf("expected Bash normalized to Shell; calls=%+v", toolCalls)
 	}
+	if raw := rawNameForCanonical(toolCalls, "Shell"); raw != "Bash" {
+		t.Errorf("expected Shell call RawName Bash, got %q", raw)
+	}
 	if !hasToolNamed(toolCalls, "StrReplace") {
 		t.Errorf("expected Edit normalized to StrReplace; calls=%+v", toolCalls)
 	}
@@ -139,6 +142,9 @@ func TestPiParser(t *testing.T) {
 	if !hasToolNamed(toolCalls, "Shell") {
 		t.Errorf("expected bash→Shell; calls=%+v", toolCalls)
 	}
+	if raw := rawNameForCanonical(toolCalls, "Shell"); raw != "bash" {
+		t.Errorf("expected bash toolCall RawName bash, got %q (calls=%+v)", raw, toolCalls)
+	}
 	// The user message sets TurnEnded for the prior turn; here it's the first
 	// line so it flushes an empty buffer (still counts as a TurnEnded line).
 	if turnEnds < 1 {
@@ -187,6 +193,15 @@ func hasToolNamed(calls []transcript.ToolCall, name string) bool {
 		}
 	}
 	return false
+}
+
+func rawNameForCanonical(calls []transcript.ToolCall, canonical string) string {
+	for _, c := range calls {
+		if c.Name == canonical && c.RawName != "" {
+			return c.RawName
+		}
+	}
+	return ""
 }
 
 func hasResultFor(results []transcript.ToolResult, id string) bool {

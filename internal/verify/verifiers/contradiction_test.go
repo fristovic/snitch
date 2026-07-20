@@ -27,8 +27,8 @@ func TestContradictionTestPassWithFailedResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3 false claim, got %+v", res)
+	if res.Epistemic != verifiers.EpistemicContradicted || res.Severity != severity.Level3 {
+		t.Fatalf("expected contradicted L3, got %+v", res)
 	}
 }
 
@@ -40,8 +40,8 @@ func TestContradictionTestPassNoRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3 false claim, got %+v", res)
+	if res.Epistemic != verifiers.EpistemicMissing || res.Severity != severity.Level2 {
+		t.Fatalf("expected missing L2, got %+v", res)
 	}
 }
 
@@ -61,8 +61,8 @@ func TestContradictionStubDetection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected stub false claim, got %+v", res)
+	if res.Epistemic != verifiers.EpistemicContradicted || res.Severity != severity.Level3 {
+		t.Fatalf("expected contradicted stub claim, got %+v", res)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestConsistencySelfContradiction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate {
+	if res.Epistemic != verifiers.EpistemicContradicted {
 		t.Fatalf("expected inconsistency, got %+v", res)
 	}
 }
@@ -104,8 +104,8 @@ func TestContradictionCommitNoEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3, got %+v", res)
+	if res.Epistemic != verifiers.EpistemicMissing || res.Severity != severity.Level2 {
+		t.Fatalf("expected missing L2, got %+v", res)
 	}
 }
 
@@ -127,8 +127,8 @@ func TestContradictionFileCreatedWithWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
-		t.Fatalf("expected pass, got %+v", res)
+	if res.Epistemic != verifiers.EpistemicSupported {
+		t.Fatalf("expected supported, got %+v", res)
 	}
 }
 
@@ -140,8 +140,8 @@ func TestContradictionNoAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Accurate || res.Severity != severity.Level3 {
-		t.Fatalf("expected L3 no_action false claim, got %+v", res)
+	if res.Epistemic != verifiers.EpistemicContradicted || res.Severity != severity.Level3 {
+		t.Fatalf("expected contradicted L3 no_action, got %+v", res)
 	}
 }
 

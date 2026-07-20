@@ -21,7 +21,7 @@ func TestFileVerifierWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("expected accurate, got %+v", res)
 	}
 }
@@ -40,7 +40,7 @@ func TestFileVerifierStrReplace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 }
@@ -54,7 +54,7 @@ func TestFileVerifierDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Accurate {
+	if res.Epistemic != verifiers.EpistemicSupported {
 		t.Fatalf("expected deleted file accurate, got %+v", res)
 	}
 }

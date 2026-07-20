@@ -69,7 +69,8 @@ func (PiParser) ParseLine(line string) (ParsedLine, bool) {
 			case "thinking":
 				// skip
 			case "toolCall":
-				tc := ToolCall{Name: canonicalToolName(c.Name, nil), ToolUseID: c.ID}
+				tc := NewToolCall(c.Name, nil)
+				tc.ToolUseID = c.ID
 				if len(c.Arguments) > 0 {
 					_ = json.Unmarshal(c.Arguments, &tc.Input)
 				}
@@ -99,7 +100,7 @@ func (PiParser) ParseLine(line string) (ParsedLine, bool) {
 		}, true
 
 	case "bashExecution":
-		tc := ToolCall{Name: ToolShell, Target: msg.Command, Result: msg.Output}
+		tc := ToolCall{RawName: "bashExecution", Name: ToolShell, Target: msg.Command, Result: msg.Output}
 		if msg.ExitCode != 0 {
 			tc.IsError = true
 		}

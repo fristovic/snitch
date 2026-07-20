@@ -299,7 +299,7 @@ func (m dashboardModel) viewRuns(listW, detailW, listRows int) (string, string) 
 			if len(runClaims) > 0 {
 				detail += "\n\nClaims:"
 				for _, c := range runClaims {
-					if c.Severity < 2 && c.Verified > 0 {
+					if !record.ShowClaimInDetail(c, 2) {
 						continue
 					}
 					detail += "\n\n" + claims.RichDetail(claims.FromRecord(c))

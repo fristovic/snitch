@@ -95,9 +95,9 @@ func payloadToEvidence(p capture.RunPayload) verifiers.TurnEvidence {
 	}
 }
 
-// ApplyClaimPolicy calibrates verifier severity using confidence, segment, and session evidence.
-func ApplyClaimPolicy(sev severity.Level, claim verifiers.Claim, accurate bool, ctx verifiers.VerifyContext) severity.Level {
-	if accurate {
+// ApplyClaimPolicy calibrates verifier severity for contradicted claims using confidence, segment, and session evidence.
+func ApplyClaimPolicy(sev severity.Level, claim verifiers.Claim, epi verifiers.Epistemic, ctx verifiers.VerifyContext) severity.Level {
+	if epi != verifiers.EpistemicContradicted {
 		return sev
 	}
 	if claim.Segment == "recap" {

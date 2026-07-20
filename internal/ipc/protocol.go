@@ -113,6 +113,7 @@ func (s *Server) Broadcast(event string, data any) {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
+	defer s.unsubscribe(conn)
 	scanner := bufio.NewScanner(conn)
 	writer := bufio.NewWriter(conn)
 	var writeMu sync.Mutex
@@ -307,7 +308,7 @@ func (s *Server) handleSetLabel(req Request, writeResp func(Response)) {
 	var p struct {
 		RunID   string `json:"run_id"`
 		Label   string `json:"label"` // "correct" | "incorrect"
-		Shared  bool   `json:"shared"`
+		Shared  *bool  `json:"shared"`
 		Session string `json:"session"` // optional dedup key
 	}
 	_ = json.Unmarshal(req.Params, &p)
@@ -315,8 +316,10 @@ func (s *Server) handleSetLabel(req Request, writeResp func(Response)) {
 		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INVALID", Message: "run_id and label (correct|incorrect) required"}})
 		return
 	}
-	// Respect the telemetry.share_by_default config if the caller didn't specify.
-	shared := p.Shared || s.deps.Config.Telemetry.ShareByDefault
+	shared := s.deps.Config.Telemetry.ShareByDefault
+	if p.Shared != nil {
+		shared = *p.Shared
+	}
 	if err := s.deps.Store.SetRunLabel(p.RunID, p.Label, shared, p.Session); err != nil {
 		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INTERNAL", Message: err.Error()}})
 		return
@@ -333,14 +336,17 @@ func (s *Server) handleAddMissedClaim(req Request, writeResp func(Response)) {
 		RunID   string `json:"run_id"`
 		Claimed string `json:"claimed"`
 		Actual  string `json:"actual"`
-		Shared  bool   `json:"shared"`
+		Shared  *bool  `json:"shared"`
 	}
 	_ = json.Unmarshal(req.Params, &p)
 	if p.Claimed == "" || p.Actual == "" {
 		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INVALID", Message: "claimed and actual required"}})
 		return
 	}
-	shared := p.Shared || s.deps.Config.Telemetry.ShareByDefault
+	shared := s.deps.Config.Telemetry.ShareByDefault
+	if p.Shared != nil {
+		shared = *p.Shared
+	}
 	if err := s.deps.Store.AddMissedClaim(p.RunID, p.Claimed, p.Actual, shared); err != nil {
 		writeResp(Response{ID: req.ID, Error: &ErrorObj{Code: "INTERNAL", Message: err.Error()}})
 		return
@@ -352,6 +358,10 @@ func (s *Server) handleAddMissedClaim(req Request, writeResp func(Response)) {
 func (s *Server) handleSubscribe(req Request, conn net.Conn, writeResp func(Response), writeMu *sync.Mutex, writer *bufio.Writer) {
 	ch := make(chan EventMsg, 32)
 	s.mu.Lock()
+	if old, ok := s.subs[conn]; ok {
+		delete(s.subs, conn)
+		close(old)
+	}
 	s.subs[conn] = ch
 	s.mu.Unlock()
 	go func() {
@@ -365,6 +375,18 @@ func (s *Server) handleSubscribe(req Request, conn net.Conn, writeResp func(Resp
 		}
 	}()
 	writeResp(Response{ID: req.ID, Result: json.RawMessage(`{"subscribed":true}`)})
+}
+
+func (s *Server) unsubscribe(conn net.Conn) {
+	s.mu.Lock()
+	ch, ok := s.subs[conn]
+	if ok {
+		delete(s.subs, conn)
+	}
+	s.mu.Unlock()
+	if ok {
+		close(ch)
+	}
 }
 
 // Client communicates with snitchd.

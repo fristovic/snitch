@@ -56,13 +56,8 @@ func (AcmeParser) ParseLine(line string) (ParsedLine, bool) {
 	}
 	pl := ParsedLine{Role: row.Role, Text: row.Content, TurnEnded: row.Done}
 	for _, t := range row.Tools {
-		tc := ToolCall{
-			// canonicalToolName maps raw names (bash, edit, ...) to Snitch's
-			// vocabulary (Shell, StrReplace, ...); pass overrides for names
-			// the shared lowercase map doesn't cover.
-			Name:      canonicalToolName(t.Name, nil),
-			ToolUseID: t.ID,
-		}
+		tc := NewToolCall(t.Name, nil) // sets RawName + canonical Name
+		tc.ToolUseID = t.ID
 		if len(t.Args) > 0 {
 			_ = json.Unmarshal(t.Args, &tc.Input)
 		}
@@ -79,8 +74,9 @@ func (AcmeParser) ParseLine(line string) (ParsedLine, bool) {
 Rules the parser must follow:
 
 - **Skip thinking/reasoning blocks** — they are not prose claims.
-- **Normalize tool names** via `canonicalToolName` so verifiers never see raw
-  harness names. If your harness exposes the model name, set `ParsedLine.Model`.
+- **Normalize tool names** via `NewToolCall` / `canonicalToolName` so verifiers
+  see canonical names (`Shell`, `Write`, …) while `raw_name` preserves the
+  harness-native name in turn snapshots for debugging.
 - **Turn boundaries**: set `TurnEnded` on whatever your format uses (explicit
   marker, assistant stop reason, or the next user message like Pi — the turn
   assembler in [assembler.go](../internal/transcript/assembler.go) handles all

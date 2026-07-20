@@ -111,7 +111,8 @@ func parseCodexResponseItem(raw []byte) (ParsedLine, bool) {
 		if err := json.Unmarshal(raw, &fc); err != nil {
 			return ParsedLine{}, false
 		}
-		tc := ToolCall{Name: canonicalToolName(fc.Name, codexToolNames), ToolUseID: fc.CallID}
+		tc := NewToolCall(fc.Name, codexToolNames)
+		tc.ToolUseID = fc.CallID
 		if len(fc.Arguments) > 0 {
 			decodeArgsInto(fc.Arguments, &tc.Input)
 		}

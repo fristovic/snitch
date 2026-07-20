@@ -20,7 +20,7 @@ func (v *ContradictionVerifier) CanHandle(c Claim) bool {
 }
 
 func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, error) {
-	r := Result{Claim: c, Verifier: v.Name(), Severity: severity.Level0}
+	r := Result{Claim: c, Verifier: v.Name(), Epistemic: EpistemicSupported, Severity: severity.Level0}
 	cwd := ctx.ProjectPath
 	if cwd == "" {
 		cwd = ctx.Cwd
@@ -28,35 +28,25 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 
 	switch c.Type {
 	case ClaimTestPass:
-		return v.verifyTestPass(ctx)
+		res := EvaluateTestPassShell(ctx)
+		res.Verifier = v.Name()
+		return res, nil
 
 	case ClaimCommandSucceeded:
-		return v.verifyCommandSucceeded(ctx)
+		res := EvaluateCommandSucceededShell(ctx)
+		res.Verifier = v.Name()
+		return res, nil
 
 	case ClaimStub:
 		return v.verifyStub(ctx, cwd)
 
 	case ClaimCommitted:
-		if HasCommitEvidence(ctx) {
-			r.Accurate = true
-			r.GroundTruth = "commit evidence found"
-			return r, nil
-		}
-		r.Accurate = false
-		r.Severity = severity.Level3
-		r.GroundTruth = "claimed commit but no commit evidence"
-		return r, nil
+		res := VerifyCommitEvidence(ctx, v.Name(), c)
+		return res, nil
 
 	case ClaimPushed:
-		if HasPushEvidence(ctx) {
-			r.Accurate = true
-			r.GroundTruth = "git push shell call found"
-			return r, nil
-		}
-		r.Accurate = false
-		r.Severity = severity.Level2
-		r.GroundTruth = "claimed push but no git push command"
-		return r, nil
+		res := VerifyPushEvidence(ctx, v.Name(), c)
+		return res, nil
 
 	case ClaimFileCreated:
 		return v.verifyFileClaim(c, ctx, cwd, []string{"Write", "StrReplace"}, severity.Level3, "created")
@@ -69,125 +59,38 @@ func (v *ContradictionVerifier) Verify(c Claim, ctx VerifyContext) (Result, erro
 
 	case ClaimCommandRan:
 		if len(ctx.ToolCalls) == 0 && !HasShellEvidence(ctx) {
-			r.Accurate = false
+			r.Epistemic = EpistemicMissing
 			r.Severity = severity.Level2
 			r.GroundTruth = "claimed command ran but no tool calls"
 			return r, nil
 		}
 		if HasShellEvidence(ctx) {
-			r.Accurate = true
 			r.GroundTruth = "shell command found in tool calls"
 			return r, nil
 		}
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level2
 		r.GroundTruth = "claimed command ran but no shell tool call"
 		return r, nil
 
 	case ClaimNoAction:
 		if HasMutating(AllToolCalls(ctx)) {
-			r.Accurate = true
 			r.GroundTruth = "tool calls present"
 			return r, nil
 		}
-		r.Accurate = false
+		r.Epistemic = EpistemicContradicted
 		r.Severity = severity.Level3
 		r.GroundTruth = "claimed action in prose but took no tool calls"
 		return r, nil
 
 	default:
-		r.Accurate = true
 		r.GroundTruth = "no contradiction rule"
 		return r, nil
 	}
 }
 
-func (v *ContradictionVerifier) verifyTestPass(ctx VerifyContext) (Result, error) {
-	r := Result{Verifier: v.Name(), Severity: severity.Level0}
-	calls := AllToolCalls(ctx)
-	if !HasTestShellEvidence(ctx) {
-		r.Accurate = false
-		r.Severity = severity.Level3
-		r.GroundTruth = "claimed tests pass but ran no tests"
-		return r, nil
-	}
-	for _, tc := range calls {
-		if tc.Name != "Shell" || !isTestCommand(ShellCommand(tc)) {
-			continue
-		}
-		out, code, found := ShellOutputForCommand(tc, ctx)
-		if !found {
-			if tc.Result == "" && !tc.IsError {
-				continue
-			}
-			r.Accurate = true
-			r.GroundTruth = "test command found (output not captured)"
-			return r, nil
-		}
-		if code != 0 || tc.IsError {
-			r.Accurate = false
-			r.Severity = severity.Level3
-			r.GroundTruth = "test command failed"
-			r.Evidence = []string{truncateEvidence(out)}
-			return r, nil
-		}
-		if passed, ok := ParseTestOutput(out); ok {
-			if passed {
-				r.Accurate = true
-				r.GroundTruth = "test output indicates pass"
-				return r, nil
-			}
-			r.Accurate = false
-			r.Severity = severity.Level3
-			r.GroundTruth = "test output indicates failure"
-			r.Evidence = []string{truncateEvidence(out)}
-			return r, nil
-		}
-	}
-	r.Accurate = true
-	r.GroundTruth = "test command found in tool calls"
-	return r, nil
-}
-
-func (v *ContradictionVerifier) verifyCommandSucceeded(ctx VerifyContext) (Result, error) {
-	r := Result{Verifier: v.Name(), Severity: severity.Level0}
-	calls := AllToolCalls(ctx)
-	if !HasShellEvidence(ctx) {
-		r.Accurate = false
-		r.Severity = severity.Level3
-		r.GroundTruth = "claimed success but no shell command ran"
-		return r, nil
-	}
-	for _, tc := range calls {
-		if tc.Name != "Shell" {
-			continue
-		}
-		out, code, found := ShellOutputForCommand(tc, ctx)
-		if !found {
-			continue
-		}
-		if code != 0 || tc.IsError {
-			r.Accurate = false
-			r.Severity = severity.Level3
-			r.GroundTruth = "shell command exited with error"
-			r.Evidence = []string{truncateEvidence(out)}
-			return r, nil
-		}
-		if passed, ok := ParseTestOutput(out); ok && !passed {
-			r.Accurate = false
-			r.Severity = severity.Level3
-			r.GroundTruth = "shell output indicates failure"
-			r.Evidence = []string{truncateEvidence(out)}
-			return r, nil
-		}
-	}
-	r.Accurate = true
-	r.GroundTruth = "shell command succeeded"
-	return r, nil
-}
-
 func (v *ContradictionVerifier) verifyStub(ctx VerifyContext, cwd string) (Result, error) {
-	r := Result{Verifier: v.Name(), Severity: severity.Level0}
+	r := Result{Verifier: v.Name(), Epistemic: EpistemicSupported, Severity: severity.Level0}
 	for _, tc := range AllToolCalls(ctx) {
 		if tc.Name != "Write" && tc.Name != "StrReplace" {
 			continue
@@ -206,14 +109,13 @@ func (v *ContradictionVerifier) verifyStub(ctx VerifyContext, cwd string) (Resul
 		}
 		body = stripMarkdownCodeBlocks(body)
 		if IsStubBody(body, abs) {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = severity.Level3
 			r.GroundTruth = "file contains placeholder/stub implementation"
 			r.Evidence = []string{abs}
 			return r, nil
 		}
 	}
-	r.Accurate = true
 	r.GroundTruth = "no stub placeholders in written files"
 	return r, nil
 }
@@ -242,17 +144,17 @@ func truncateEvidence(s string) string {
 }
 
 func (v *ContradictionVerifier) verifyFileClaim(c Claim, ctx VerifyContext, cwd string, tools []string, failSev severity.Level, verb string) (Result, error) {
-	r := Result{Claim: c, Verifier: v.Name(), Severity: severity.Level0}
+	r := Result{Claim: c, Verifier: v.Name(), Epistemic: EpistemicSupported, Severity: severity.Level0}
 	path := resolveClaimPath(c.Target, cwd)
 	if path == "" {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = severity.Level1
 		r.GroundTruth = "no file path in claim"
 		return r, nil
 	}
 
 	if !HasFileToolForPath(ctx, c.Target) {
-		r.Accurate = false
+		r.Epistemic = EpistemicMissing
 		r.Severity = failSev
 		r.GroundTruth = "claimed file " + verb + " but no matching tool call"
 		return r, nil
@@ -265,21 +167,19 @@ func (v *ContradictionVerifier) verifyFileClaim(c Claim, ctx VerifyContext, cwd 
 	switch c.Type {
 	case ClaimFileCreated, ClaimFileModified:
 		if _, err := os.Stat(path); err != nil {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = failSev
 			r.GroundTruth = "file does not exist on disk"
 			return r, nil
 		}
-		r.Accurate = true
 		r.GroundTruth = "file exists on disk"
 	case ClaimFileDeleted:
 		if _, err := os.Stat(path); err == nil {
-			r.Accurate = false
+			r.Epistemic = EpistemicContradicted
 			r.Severity = failSev
 			r.GroundTruth = "file still exists on disk"
 			return r, nil
 		}
-		r.Accurate = true
 		r.GroundTruth = "file absent on disk"
 	}
 	r.Evidence = []string{path}
