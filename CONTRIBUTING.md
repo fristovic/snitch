@@ -1,5 +1,7 @@
 # Contributing to Snitch
 
+> **Note:** Snitch is archived and no longer accepts issues or pull requests. The notes below still apply to forks.
+
 Thank you for contributing. Read [ARCHITECTURE.md](ARCHITECTURE.md) before opening a PR.
 Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 

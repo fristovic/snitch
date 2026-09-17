@@ -70,9 +70,9 @@ After capture, `verify.BuildVerifyContext` assembles evidence before verifiers r
 
 Turn snapshots persist `payload_json`, `start_head`, `end_head`, and `file_manifest_json` for the next turn's baseline.
 
-## Data flywheel (coming soon)
+## Data flywheel (not shipped)
 
-Opt-in community labeling (correct / incorrect feedback, missed-claim reports) is planned. Labels store on the `runs` table in `~/.snitch/snitch.db`. When sharing is enabled (`telemetry.enabled` + share flag), sync may send the claim sentence, capped surrounding context, claimed→actual, and metadata (claim type, harness, model, verdict, label, sentence hash) — never user prompts, code, paths, or full transcripts. The Snitch Bar labeling UI stays behind `flywheelUIEnabled` until the training API ships.
+Opt-in community labeling (correct / incorrect feedback, missed-claim reports) and label sync were planned and never shipped. Label storage exists on the `runs` table in `~/.snitch/snitch.db`. The Snitch Bar labeling UI stayed behind `flywheelUIEnabled`.
 
 ## Prose claim verification
 

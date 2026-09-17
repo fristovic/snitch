@@ -15,6 +15,4 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) and [docs/security.md](docs/security.md).
 
 ## Supported versions
 
-| Version | Supported |
-|---------|-----------|
-| latest release | Yes |
+No versions are supported. Snitch is archived and no longer maintained.

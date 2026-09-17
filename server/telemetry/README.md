@@ -1,6 +1,8 @@
 # Snitch Telemetry Server
 
-Optional Supabase project for the upcoming opt-in labeling flywheel. Two
+> **Note:** Snitch is archived. This server was never deployed.
+
+Optional Supabase project prepared for the opt-in labeling flywheel. Two
 endpoints, two tables.
 
 Intended hostname: `https://telemetry.snitchworks.com` (custom domain in front
@@ -39,8 +41,7 @@ supabase functions deploy telemetry-register
 
 ## Accuracy aggregates
 
-`label_accuracy` (see migrations) is the view that will power a public
-accuracy page once enough labels exist:
+`label_accuracy` (see migrations) was intended to power a public accuracy page:
 
 ```sql
 SELECT claim_type, harness, agree, total, ROUND(100.0 * agree / total, 1) AS pct

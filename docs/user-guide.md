@@ -67,9 +67,9 @@ If Snitch is paused or offline, choose **Start Snitching** to resume.
 
 Disable login auto-start: `SNITCH_MENUBAR=0 ./scripts/install.sh`
 
-### Labeling (coming soon)
+### Labeling (not shipped)
 
-Community labeling (Mark Correct / Incorrect, report missed claims, opt-in sync) is **coming soon**. When enabled, shared examples may include the claim sentence, short surrounding context, and claimed→actual — never prompts, code, or paths. See the README “Help train Snitch” section.
+Community labeling (Mark Correct / Incorrect, report missed claims, opt-in sync) was planned and never shipped.
 
 ## Notifications
 
@@ -204,9 +204,9 @@ Interactive TUI with live refresh (`--harness` to filter):
 
 Shows daemon health and enabled harnesses. Use `--detailed` for claim statistics, per-harness run counts, and recent failures.
 
-### `snitch label` (coming soon)
+### `snitch label` (not shipped)
 
-Community labeling and opt-in training sync are **coming soon**. Shared payloads (when enabled) include claim sentence + capped context + claimed→actual; never prompts, code, or paths.
+The `snitch label` command was planned and never shipped.
 
 ### `snitch replay`
 

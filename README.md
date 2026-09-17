@@ -2,9 +2,11 @@
   <img src="docs/snitch_logo.png" alt="Snitch logo" width="320">
 </p>
 
+> **Archived.** Snitch is no longer maintained. Final release: 0.5.0 (July 20, 2026). Fork freely.
+
 <p align="center"><strong>Snitch watches your AI agent so you don't have to.</strong></p>
 
-<p align="center"><a href="#install">Install</a> · <a href="#help-train-snitch-coming-soon">Help train Snitch (coming soon)</a> · <a href="#roadmap">Roadmap</a></p>
+<p align="center"><a href="#install">Install</a> · <a href="#why-this-is-archived">Why this is archived</a></p>
 
 <p align="center">
   <span style="display: inline-block; max-width: 720px; text-align: justify;">
@@ -12,11 +14,21 @@
   </span>
 </p>
 
+## Why this is archived
+
+The lies Snitch was built to catch are fading.
+
+I measured 140 runs against one trap repo, ten runs per Cursor release, from July 13 to September 11, 2026. False checkable claims fell from 40.9% to 2.2%. An 18x drop in two months.
+
+Agents verify before they claim now. The tool did its job.
+
+The repo stays up for reference.
+
 ## Install
 
 
 
-### macOS (Homebrew — recommended)
+### macOS (Homebrew recommended)
 
 ```bash
 brew tap fristovic/snitch
@@ -63,7 +75,7 @@ snitch start
 
 ### Menu bar (everyday use)
 
-Open Snitch Bar once — it lives in the menu bar with no Dock icon:
+Open Snitch Bar once. It lives in the menu bar with no Dock icon:
 
 ```bash
 snitch start
@@ -107,8 +119,8 @@ Snitch stores every agent **turn** as a **run** (with a verdict and claims). A *
 
 | View                    | Best for         | What you see                                                                          |
 | ----------------------- | ---------------- | ------------------------------------------------------------------------------------- |
-| `snitch log --run <id>` | One agent turn   | Full breakdown — verdict, prompt, tool calls, every claim with evidence.              |
-| `snitch dashboard`      | Browsing history | Interactive TUI — flip between runs and flagged claims, filter, search, live refresh. |
+| `snitch log --run <id>` | One agent turn   | Full breakdown: verdict, prompt, tool calls, every claim with evidence.              |
+| `snitch dashboard`      | Browsing history | Interactive TUI: flip between runs and flagged claims, filter, search, live refresh. |
 
 
 **Menu bar shortcuts:** **View Details…** runs `snitch log --run <id>` for the latest flagged claim. **History ▸ Open Dashboard…** runs `snitch dashboard`.
@@ -150,13 +162,13 @@ snitch dashboard
 | `snitch log --run <id>`       | Full verification detail for one run (`--trace`, `--json`)                              |
 | `snitch log --harness <name>` | List recent runs for one agent platform                                                 |
 | `snitch dashboard`            | Interactive TUI for runs and flagged claims (`--harness` filter)                        |
-| `snitch replay <path>`        | Run any transcript through the pipeline offline — measure accuracy on your own sessions |
+| `snitch replay <path>`        | Run any transcript through the pipeline offline to measure accuracy on your own sessions |
 | `snitch doctor`               | Debug install checklist (per-harness)                                                   |
 | `snitch uninstall`            | Remove daemon and binaries (`--purge` for data)                                         |
 | `snitch config`               | View/set configuration                                                                  |
 
 
-Snitch runs passively after install — it reads each enabled agent's local transcripts (see [Supported agents](#supported-agents)); Cursor's `~/.cursor/projects` is watched by default.
+Snitch runs passively after install. It reads each enabled agent's local transcripts (see [Supported agents](#supported-agents)). Cursor's `~/.cursor/projects` is watched by default.
 
 ### Notifications
 
@@ -206,10 +218,10 @@ The first notification triggers the macOS permission prompt for Snitch Bar.
 
 Snitch persists each turn's full payload (tool calls, git HEAD, file manifest) in SQLite. When verifying recap/summary prose, it can credit evidence from up to **three prior turns** in the same session for:
 
-- `committed` / `pushed` — git shell or HEAD delta in prior turns
-- `test_pass` / `command_*` — shell evidence in prior turns
-- `file_created` / `file_modified` / `file_deleted` — file tools + manifests in prior turns
-- `stub` — placeholder bodies in files written this turn or prior turns
+- `committed` / `pushed`: git shell or HEAD delta in prior turns
+- `test_pass` / `command_*`: shell evidence in prior turns
+- `file_created` / `file_modified` / `file_deleted`: file tools + manifests in prior turns
+- `stub`: placeholder bodies in files written this turn or prior turns
 
 **Same-turn only:** `no_action`, `self_contradiction`, `count_mismatch`, and `negation_violation` never use cross-turn lookback.
 
@@ -233,32 +245,9 @@ After enabling a platform, restart Snitch (`snitch start`). Each platform's clai
 
 The dashboard accepts a `--harness` filter to scope to one agent: `snitch dashboard --harness claude`.
 
-## Help train Snitch (coming soon)
-
-A community labeling flywheel — mark whether Snitch was right or wrong, report missed claims, and optionally share training examples — is **coming soon**. Labels stay local by default.
-
-When sharing is enabled (dual opt-in: `telemetry.enabled` + share flag), a shared example may include:
-
-- the **claim sentence** (full assistant sentence containing the match)
-- a **short surrounding context** (capped ±1–2 sentences)
-- Snitch’s **claimed → actual** pair
-- metadata: claim type, harness, model, verdict, your label, and a hash for dedup
-
-**Never shared:** user prompts, full transcripts, source code, file paths, project paths, or shell dumps.
-
-## Roadmap
-
-- **0.4.x (this release):** Claim-first UX (flagged sentence → checked), `tool_`* types, `UNUserNotificationCenter` alerts.
-- **0.3.x:** Multi-harness ingestion (Cursor + Claude Code + Codex + Pi + OpenCode), session lookback, Snitch Bar notifications with app icon.
-- **Coming soon:** Community labeling and opt-in sync of claim sentences + short context to train a false-positive filter.
-- **Later:** A locally-run false-positive classifier trained on community labels — reduces alert noise by filtering regex hits that aren't genuine claims.
-- **Snitchworks:** A paid team layer — centralized dashboard, policy engine, premium semantic claim extraction.
-
-
-
 ## Limitations
 
-- Deterministic regex extraction only (no LLM claim parsing) — semantic extraction is a later goal
+- Deterministic regex extraction only (no LLM claim parsing).
 - Lookback is limited to the current agent session (3 turns), not cross-session history
 - Subagent tool calls are merged by **time window**, not `tool_use_id` mapping
 - Consistency checks remain same-turn only
